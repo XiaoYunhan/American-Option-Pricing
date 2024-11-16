@@ -1,5 +1,10 @@
 from scipy.stats import norm
 import numpy as np
+from enum import Enum
+
+class OptionType(Enum):
+    Call = 'call'
+    Put = 'put'
 
 class EuropeanOption:
     def __init__(self, 
