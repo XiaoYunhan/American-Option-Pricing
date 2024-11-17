@@ -1,7 +1,3 @@
-# Refactored code following a good project structure
-
-# File: american_option_pricing/chebyshev_interpolator.py
-
 import numpy as np
 
 class ChebyshevInterpolator:

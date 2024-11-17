@@ -28,5 +28,5 @@ def test_chebyshev_interpolator_nodes(n, tau_max, expected_first_node, expected_
     assert tau_nodes[-1] == pytest.approx(expected_last_node ** 2, rel=1e-6)
 
 if __name__ == "__main__":
-    pytest.main(["-v", "american_option_pricing/tests/test_chebyshev_interpolator.py"])
+    pytest.main(["-v", "src/tests/test_chebyshev_interpolator.py"])
 
