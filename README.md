@@ -51,9 +51,9 @@ The complete algorithm involves the following steps:
 
 8. **Update Boundary Values Using Jacobi-Newton Scheme**:
    - The boundary values are updated iteratively using the Jacobi-Newton formula:
-     \[
+     $
      B^{(j+1)}(\tau) = B^{(j)}(\tau) + \eta \frac{B^{(j)}(\tau) - f(\tau, B^{(j)})}{f'(\tau, B^{(j)}) - 1}
-     \]
+     $
    - The hyper-parameter $\eta$ controls the step size, ensuring stability of the iteration.
 
 9. **Iterate Until Convergence**:
