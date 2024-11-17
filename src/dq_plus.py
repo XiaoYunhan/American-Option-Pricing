@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import BarycentricInterpolator
+from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
 
 class DQPlus:
@@ -159,6 +160,39 @@ class DQPlus:
         for k, y_k in enumerate(y_nodes):
             adjusted_tau = tau - tau * (1 + y_k)**2 / 4
             z = 2 * np.sqrt(adjusted_tau / np.max(self.tau_nodes)) - 1
-            B_values[k] = self.clenshaw_algorithm(z)
-
+            B_values[k] = max(self.clenshaw_algorithm(z), 1e-10)  # Ensure B_values are positive
+            
         return B_values
+    
+    def compute_ND_values(self, tau, B_values):
+        """
+        Compute N(tau, B) and D(tau, B) using numerical quadrature.
+        """
+        vol_sqrt_tau = self.vol * np.sqrt(tau)
+
+        def integrand_N(u, B):
+            exp_factor = np.exp((self.q - self.r) * u)
+            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
+            return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
+
+        def integrand_D(u, B):
+            exp_factor = np.exp(self.q * u)
+            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
+            return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
+
+        # Evaluate N and D for each B value
+        N_values = np.array([quad(integrand_N, 0, tau, args=(B,))[0] for B in B_values])
+        D_values = np.array([quad(integrand_D, 0, tau, args=(B,))[0] for B in B_values])
+
+        # Clip D_values to avoid division by zero
+        D_values = np.clip(D_values, 1e-10, None)
+
+        return N_values, D_values
+    
+    def compute_f_values(self, tau, B_values):
+        """
+        Compute f(tau, B) values based on N and D.
+        """
+        N_values, D_values = self.compute_ND_values(tau, B_values)
+        f_values = N_values / D_values
+        return f_values

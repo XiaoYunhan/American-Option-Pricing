@@ -95,6 +95,35 @@ def test_evaluate_boundary(K, r, q, vol, tau_nodes, y_nodes):
     assert all(np.isfinite(B) for B in B_values)
     assert all(B >= 0 for B in B_values)
 
+@pytest.mark.parametrize("K, r, q, vol, tau_nodes", [
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10)),
+    (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20)),
+    (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15)),
+])
+def test_compute_ND_values(K, r, q, vol, tau_nodes):
+    dqplus = DQPlus(K, r, q, vol, tau_nodes)
+    dqplus.initialize_boundary()
+    tau_test = tau_nodes[len(tau_nodes) // 2]
+    B_values = dqplus.evaluate_boundary(tau_test, np.linspace(-1, 1, 5))
+    N_values, D_values = dqplus.compute_ND_values(tau_test, B_values)
+    assert all(np.isfinite(N) for N in N_values)
+    assert all(np.isfinite(D) for D in D_values)
+    assert all(D > 0 for D in D_values)
+
+@pytest.mark.parametrize("K, r, q, vol, tau_nodes", [
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10)),
+    (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20)),
+    (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15)),
+])
+def test_compute_f_values(K, r, q, vol, tau_nodes):
+    dqplus = DQPlus(K, r, q, vol, tau_nodes)
+    dqplus.initialize_boundary()
+    tau_test = tau_nodes[len(tau_nodes) // 2]
+    B_values = dqplus.evaluate_boundary(tau_test, np.linspace(-1, 1, 5))
+    f_values = dqplus.compute_f_values(tau_test, B_values)
+    assert all(np.isfinite(f) for f in f_values)
+    assert all(f >= 0 for f in f_values)
+
 if __name__ == "__main__":
     pytest.main(["-v"])
 
