@@ -1,0 +1,23 @@
+name: American-Option-Pricing
+channels:
+  # - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  # - matplotlib
+  # - scipy
+  # - scikit-learn
+  # - seaborn
+  # - jupyterlab
+  # - ipython
+  # - flake8
+  - pytest
+  # - black
+  # - isort
+  # - pip
+  # - pip:
+  #     - requests
+  #     - tqdm
+  #     - mypy
