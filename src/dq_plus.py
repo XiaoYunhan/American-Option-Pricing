@@ -27,6 +27,7 @@ class DQPlus:
         self.n = len(tau_nodes)
         self.initial_boundary = np.zeros(self.n)
         self.chebyshev_interpolator = None
+        self.chebyshev_coefficients = None
 
     def initialize_boundary(self):
         """
@@ -116,3 +117,48 @@ class DQPlus:
             a_coefficients[k] = (1 / (2 * self.n)) * (H_values[0] + (-1)**self.n * H_values[-1]) + (2 / self.n) * sum_value
 
         return a_coefficients
+    
+    def clenshaw_algorithm(self, z):
+        """
+        Evaluate the Chebyshev polynomial using Clenshaw's algorithm.
+
+        Parameters:
+        - z (float): The input value to evaluate the polynomial.
+
+        Returns:
+        - (float): The evaluated value of the Chebyshev polynomial.
+        """
+        n = len(self.chebyshev_coefficients)
+        b_next = 0.0
+        b_curr = 0.0
+
+        for j in range(n - 1, 0, -1):
+            b_temp = b_curr
+            b_curr = 2 * z * b_curr - b_next + self.chebyshev_coefficients[j]
+            b_next = b_temp
+
+        return z * b_curr - b_next + self.chebyshev_coefficients[0]
+
+    def evaluate_boundary(self, tau, y_nodes):
+        """
+        For each tau_i, evaluate B(tau) using Clenshaw algorithm at the adjusted points.
+
+        Parameters:
+        - tau (float): The current time node tau_i.
+        - y_nodes (numpy array): The quadrature nodes y_k.
+
+        Returns:
+        - B_values (numpy array): Evaluated boundary values at adjusted points.
+        """
+        if self.chebyshev_coefficients is None:
+            H_values = self.compute_H()
+            self.initialize_chebyshev_interpolation(H_values)
+
+        B_values = np.zeros(len(y_nodes))
+
+        for k, y_k in enumerate(y_nodes):
+            adjusted_tau = tau - tau * (1 + y_k)**2 / 4
+            z = 2 * np.sqrt(adjusted_tau / np.max(self.tau_nodes)) - 1
+            B_values[k] = self.clenshaw_algorithm(z)
+
+        return B_values
