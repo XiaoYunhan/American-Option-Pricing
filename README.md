@@ -23,30 +23,30 @@ The Spectral Collocation Method solves for the early exercise boundary of Americ
 The complete algorithm involves the following steps:
 
 1. **Compute Chebyshev Nodes**:
-   - We compute the Chebyshev nodes \( x_i \) based on the extremum points of the Chebyshev polynomial.
-   - The collocation time points \( \tau_i \) are determined using \( \tau_i = x_i^2 \), creating a grid of points for the numerical solution.
+   - We compute the Chebyshev nodes $x_i$ based on the extremum points of the Chebyshev polynomial.
+   - The collocation time points $\tau_i$ are determined using $\tau_i = x_i^2$, creating a grid of points for the numerical solution.
 
 2. **Compute Quadrature Nodes and Weights**:
-   - Using the Gauss-Legendre quadrature method, we compute the quadrature nodes \( y_k \) and weights \( w_k \) for accurate numerical integration.
+   - Using the Gauss-Legendre quadrature method, we compute the quadrature nodes $y_k$ and weights $w_k$ for accurate numerical integration.
 
 3. **Initialize the Early Exercise Boundary**:
-   - The initial guess \( B^{(0)}(\tau_i) \) is set using an approximate method (QD+ approach).
-   - The initial boundary value at \( \tau_0 \) is \( B^{(0)}(\tau_0) = K \min\left(1, \frac{r}{q}\right) \), and subsequent values are estimated using an exponential decay model.
+   - The initial guess $B^{(0)}(\tau_i)$ is set using an approximate method (QD+ approach).
+   - The initial boundary value at $\tau_0$ is $B^{(0)}(\tau_0) = K \min\left(1, \frac{r}{q}\right)$, and subsequent values are estimated using an exponential decay model.
 
-4. **Compute \( H(\sqrt{\tau}) \) and Initialize Chebyshev Interpolation**:
-   - We compute \( H(\sqrt{\tau}) = \left(\ln\left(\frac{B^{(j-1)}(\tau)}{K}\right)\right)^2 \) at each collocation point.
-   - The Chebyshev interpolation coefficients \( a_k \) are determined using the discrete Chebyshev transform.
+4. **Compute $H(\sqrt{\tau})$ and Initialize Chebyshev Interpolation**:
+   - We compute $H(\sqrt{\tau}) = \left(\ln\left(\frac{B^{(j-1)}(\tau)}{K}\right)\right)^2$ at each collocation point.
+   - The Chebyshev interpolation coefficients $a_k$ are determined using the discrete Chebyshev transform.
 
 5. **Evaluate the Boundary Using Clenshaw Algorithm**:
-   - For each \( \tau_i \), we use the Clenshaw algorithm to evaluate the boundary values at adjusted points \( \tau_i - \tau_i(1 + y_k)^2 / 4 \).
+   - For each $\tau_i$, we use the Clenshaw algorithm to evaluate the boundary values at adjusted points $\tau_i - \tau_i(1 + y_k)^2 / 4$.
    - This provides an efficient way to compute the polynomial evaluation using the Chebyshev coefficients.
 
-6. **Compute \( N(\tau_i, B) \) and \( D(\tau_i, B) \) Using Numerical Quadrature**:
-   - We use numerical integration to compute the numerator \( N(\tau_i, B) \) and denominator \( D(\tau_i, B) \) based on the integrands involving normal distributions.
-   - These values are used to determine the function \( f(\tau, B) \), which is central to the fixed-point iteration scheme.
+6. **Compute $N(\tau_i, B)$ and $D(\tau_i, B)$ Using Numerical Quadrature**:
+   - We use numerical integration to compute the numerator $N(\tau_i, B)$ and denominator $D(\tau_i, B)$ based on the integrands involving normal distributions.
+   - These values are used to determine the function $f(\tau, B)$, which is central to the fixed-point iteration scheme.
 
-7. **Compute the Derivative of \( f(\tau_i, B) \)**:
-   - We approximate the derivative \( f'(\tau, B) \) using finite differences.
+7. **Compute the Derivative of $f(\tau_i, B)$**:
+   - We approximate the derivative $f'(\tau, B)$ using finite differences.
    - This derivative is critical for the Jacobi-Newton update step.
 
 8. **Update Boundary Values Using Jacobi-Newton Scheme**:
@@ -54,10 +54,10 @@ The complete algorithm involves the following steps:
      \[
      B^{(j+1)}(\tau) = B^{(j)}(\tau) + \eta \frac{B^{(j)}(\tau) - f(\tau, B^{(j)})}{f'(\tau, B^{(j)}) - 1}
      \]
-   - The hyper-parameter \( \eta \) controls the step size, ensuring stability of the iteration.
+   - The hyper-parameter $\eta$ controls the step size, ensuring stability of the iteration.
 
 9. **Iterate Until Convergence**:
-   - The algorithm iterates through steps 5 to 8 for a fixed number of iterations (typically \( m \) iterations).
+   - The algorithm iterates through steps 5 to 8 for a fixed number of iterations (typically $m$ iterations).
    - The process stops when the boundary values converge within a specified tolerance.
 
 ### Code Structure
@@ -70,7 +70,7 @@ The core implementation of the Spectral Collocation Method is encapsulated in th
   - **Chebyshev Interpolation** (`initialize_chebyshev_interpolation`): Computes the Chebyshev coefficients for interpolation.
   - **Clenshaw Algorithm** (`clenshaw_algorithm`): Efficiently evaluates the Chebyshev polynomial.
   - **Boundary Evaluation** (`evaluate_boundary`): Evaluates the boundary values at adjusted points using the Clenshaw algorithm.
-  - **Numerical Quadrature** (`compute_ND_values`): Computes \( N \) and \( D \) using numerical integration.
+  - **Numerical Quadrature** (`compute_ND_values`): Computes $N$ and $D$ using numerical integration.
   - **Fixed-Point Iteration** (`fixed_point_iteration`): Refines the boundary values iteratively using Newton's method.
   - **Jacobi-Newton Update** (`update_boundary`): Updates the boundary values using the Jacobi-Newton formula.
   - **Full Algorithm Execution** (`run_full_algorithm`): Executes the complete algorithm for a fixed number of iterations.
