@@ -124,6 +124,28 @@ def test_compute_f_values(K, r, q, vol, tau_nodes):
     assert all(np.isfinite(f) for f in f_values)
     assert all(f >= 0 for f in f_values)
 
+@pytest.mark.parametrize("K, r, q, vol, tau_nodes", [
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10)),
+    (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20)),
+    (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15)),
+])
+def test_compute_f_derivative(K, r, q, vol, tau_nodes):
+    """
+    Test the compute_f_derivative() method for correct derivative calculation.
+    """
+    dqplus = DQPlus(K, r, q, vol, tau_nodes)
+    dqplus.initialize_boundary()
+
+    tau_test = tau_nodes[len(tau_nodes) // 2]
+    y_nodes = np.linspace(-1, 1, 5)
+    B_values = dqplus.evaluate_boundary(tau_test, y_nodes)
+
+    # Compute f' values
+    f_derivative_values = dqplus.compute_f_derivative(tau_test, B_values)
+    # Verify whether f' is finite for all B values
+    assert all(np.isfinite(f) for f in f_derivative_values)
+    # Verify numerical stability of f' values, derivatives should not be extremely large
+    assert np.all(np.abs(f_derivative_values) < 100)
+
 if __name__ == "__main__":
     pytest.main(["-v"])
-

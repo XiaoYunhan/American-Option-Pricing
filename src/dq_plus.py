@@ -196,3 +196,31 @@ class DQPlus:
         N_values, D_values = self.compute_ND_values(tau, B_values)
         f_values = N_values / D_values
         return f_values
+    
+    def compute_f_derivative(self, tau, B_values, h=1e-5):
+        """
+        Compute f'(tau, B) using numerical differentiation (central difference method).
+
+        Parameters:
+        - tau (float): The current time node tau_i.
+        - B_values (numpy array): Evaluated boundary values at adjusted points.
+        - h (float): Step size for numerical differentiation.
+
+        Returns:
+        - f_derivative (numpy array): Computed derivative values of f with respect to B.
+        """
+        f_values = self.compute_f_values(tau, B_values)
+        f_derivative = np.zeros(len(B_values))
+
+        for i, B in enumerate(B_values):
+            B_forward = B + h
+            B_backward = B - h
+
+            # Compute f values at B + h and B - h
+            f_forward = self.compute_f_values(tau, np.array([B_forward]))[0]
+            f_backward = self.compute_f_values(tau, np.array([B_backward]))[0]
+
+            # Central difference approximation
+            f_derivative[i] = (f_forward - f_backward) / (2 * h)
+
+        return f_derivative
