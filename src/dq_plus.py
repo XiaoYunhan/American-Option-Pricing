@@ -39,8 +39,7 @@ class DQPlus:
 
         # Estimate B^(0)(tau_i) for i = 1, ..., n using exponential decay model
         for i in range(1, self.n):
-            tau_i = self.tau_nodes[i]
-            decay_factor = np.exp(-self.r * tau_i)
+            decay_factor = np.exp(-self.r * self.tau_nodes[i])
             self.initial_boundary[i] = B_tau_0 * decay_factor
     
     def compute_H(self):
@@ -52,7 +51,7 @@ class DQPlus:
         """
         H_values = np.zeros(self.n)
         for i in range(self.n):
-            tau = self.tau_nodes[i]
+            # tau = self.tau_nodes[i]
             B_tau = self.initial_boundary[i]
             H_values[i] = (np.log(B_tau / self.K))**2
 
@@ -115,7 +114,8 @@ class DQPlus:
                 sum_value += H_values[i] * cos_term
 
             a_coefficients[k] = (1 / (2 * self.n)) * (H_values[0] + (-1)**self.n * H_values[-1]) + (2 / self.n) * sum_value
-
+        
+        self.chebyshev_coefficients = a_coefficients
         return a_coefficients
     
     def clenshaw_algorithm(self, z):

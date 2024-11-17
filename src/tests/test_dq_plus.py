@@ -76,24 +76,24 @@ def test_clenshaw_algorithm(coefficients, z, expected_value):
     result = dqplus.clenshaw_algorithm(z)
     assert result == pytest.approx(expected_value, rel=1e-6)
 
-# @pytest.mark.parametrize("K, r, q, vol, tau_nodes, y_nodes", [
-#     (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10), np.linspace(-1, 1, 5)),
-#     (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20), np.linspace(-1, 1, 7)),
-#     (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15), np.linspace(-1, 1, 4)),
-#     (100, 0.05, 0.02, 0.2, np.linspace(0, 10, 10), np.linspace(-1, 1, 5)),
-# ])
-# def test_evaluate_boundary(K, r, q, vol, tau_nodes, y_nodes):
-#     """
-#     Test the evaluate_boundary() method for correct boundary evaluation using Clenshaw's algorithm.
-#     """
-#     dqplus = DQPlus(K, r, q, vol, tau_nodes)
-#     dqplus.initialize_boundary()
-#     H_values = dqplus.compute_H()
-#     dqplus.initialize_chebyshev_interpolation(H_values)
-#     tau_test = tau_nodes[len(tau_nodes) // 2]
-#     B_values = dqplus.evaluate_boundary(tau_test, y_nodes)
-#     assert all(np.isfinite(B) for B in B_values)
-#     assert all(B >= 0 for B in B_values)
+@pytest.mark.parametrize("K, r, q, vol, tau_nodes, y_nodes", [
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10), np.linspace(-1, 1, 5)),
+    (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20), np.linspace(-1, 1, 7)),
+    (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15), np.linspace(-1, 1, 4)),
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 10, 10), np.linspace(-1, 1, 5)),
+])
+def test_evaluate_boundary(K, r, q, vol, tau_nodes, y_nodes):
+    """
+    Test the evaluate_boundary() method for correct boundary evaluation using Clenshaw's algorithm.
+    """
+    dqplus = DQPlus(K, r, q, vol, tau_nodes)
+    dqplus.initialize_boundary()
+    H_values = dqplus.compute_H()
+    dqplus.initialize_chebyshev_interpolation(H_values)
+    tau_test = tau_nodes[len(tau_nodes) // 2]
+    B_values = dqplus.evaluate_boundary(tau_test, y_nodes)
+    assert all(np.isfinite(B) for B in B_values)
+    assert all(B >= 0 for B in B_values)
 
 if __name__ == "__main__":
     pytest.main(["-v"])
