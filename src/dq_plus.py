@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import BarycentricInterpolator
+from src.chebyshev_interpolator import ChebyshevInterpolator
 
 class DQPlus:
     """
@@ -25,6 +26,7 @@ class DQPlus:
         self.tau_nodes = tau_nodes
         self.n = len(tau_nodes)
         self.initial_boundary = np.zeros(self.n)
+        self.chebyshev_interpolator = None
 
     def initialize_boundary(self):
         """
@@ -39,6 +41,21 @@ class DQPlus:
             tau_i = self.tau_nodes[i]
             decay_factor = np.exp(-self.r * tau_i)
             self.initial_boundary[i] = B_tau_0 * decay_factor
+    
+    def compute_H(self):
+        """
+        Compute H(sqrt(tau)) for each collocation point based on the previous boundary values.
+
+        Returns:
+        - H_values (numpy array): The computed H(sqrt(tau)) values.
+        """
+        H_values = np.zeros(self.n)
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            B_tau = self.initial_boundary[i]
+            H_values[i] = (np.log(B_tau / self.K))**2
+
+        return H_values
 
     def fixed_point_iteration(self, max_iter=10, tol=1e-8):
         """
@@ -78,3 +95,24 @@ class DQPlus:
         - initial_boundary (numpy array): Refined exercise boundary values.
         """
         return self.initial_boundary
+    
+    def initialize_chebyshev_interpolation(self, H_values):
+        """
+        Initialize the Chebyshev interpolation by computing the coefficients a_k.
+        """
+        self.chebyshev_interpolator = ChebyshevInterpolator(self.n - 1, np.max(self.tau_nodes))
+        self.chebyshev_interpolator.compute_nodes()
+
+        x_nodes, tau_nodes = self.chebyshev_interpolator.get_nodes()
+        z_nodes = -np.cos(np.pi * np.arange(self.n) / (self.n - 1))
+
+        a_coefficients = np.zeros(self.n)
+        for k in range(self.n):
+            sum_value = 0.0
+            for i in range(1, self.n - 1):
+                cos_term = np.cos(i * k * np.pi / self.n)
+                sum_value += H_values[i] * cos_term
+
+            a_coefficients[k] = (1 / (2 * self.n)) * (H_values[0] + (-1)**self.n * H_values[-1]) + (2 / self.n) * sum_value
+
+        return a_coefficients
