@@ -9,7 +9,7 @@ class DQPlus:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_nodes):
+    def __init__(self, K, r, q, vol, tau_nodes, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -26,6 +26,7 @@ class DQPlus:
         self.vol = vol
         self.tau_nodes = tau_nodes
         self.n = len(tau_nodes)
+        self.eta = eta
         self.initial_boundary = np.zeros(self.n)
         self.chebyshev_interpolator = None
         self.chebyshev_coefficients = None
@@ -106,16 +107,13 @@ class DQPlus:
 
         x_nodes, tau_nodes = self.chebyshev_interpolator.get_nodes()
         z_nodes = -np.cos(np.pi * np.arange(self.n) / (self.n - 1))
-
         a_coefficients = np.zeros(self.n)
         for k in range(self.n):
             sum_value = 0.0
             for i in range(1, self.n - 1):
                 cos_term = np.cos(i * k * np.pi / self.n)
                 sum_value += H_values[i] * cos_term
-
             a_coefficients[k] = (1 / (2 * self.n)) * (H_values[0] + (-1)**self.n * H_values[-1]) + (2 / self.n) * sum_value
-        
         self.chebyshev_coefficients = a_coefficients
         return a_coefficients
     
@@ -129,6 +127,9 @@ class DQPlus:
         Returns:
         - (float): The evaluated value of the Chebyshev polynomial.
         """
+        if self.chebyshev_coefficients is None:
+            raise ValueError("Chebyshev coefficients are not initialized.")
+        
         n = len(self.chebyshev_coefficients)
         b_next = 0.0
         b_curr = 0.0
@@ -168,23 +169,36 @@ class DQPlus:
         """
         Compute N(tau, B) and D(tau, B) using numerical quadrature.
         """
-        vol_sqrt_tau = self.vol * np.sqrt(tau)
+        vol_sqrt_tau = max(self.vol * np.sqrt(tau), 1e-8) # Increase minimum value protection to avoid division by zero
 
         def integrand_N(u, B):
+            if B <= 1e-10:
+                return 0.0
             exp_factor = np.exp((self.q - self.r) * u)
-            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
+            m = (np.log(max(B / self.K, 1e-10)) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
+            if not np.isfinite(m):
+                return 0.0
             return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
 
         def integrand_D(u, B):
+            if B <= 1e-10:
+                return 0.0
             exp_factor = np.exp(self.q * u)
-            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
+            m = (np.log(max(B / self.K, 1e-10)) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
+            if not np.isfinite(m):
+                return 0.0
             return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
 
-        # Evaluate N and D for each B value
-        N_values = np.array([quad(integrand_N, 0, tau, args=(B,))[0] for B in B_values])
-        D_values = np.array([quad(integrand_D, 0, tau, args=(B,))[0] for B in B_values])
+        # Calculate N and D for each B value
+        try:
+            N_values = np.array([quad(integrand_N, 0, tau, args=(B,), limit=100)[0] for B in B_values])
+            D_values = np.array([quad(integrand_D, 0, tau, args=(B,), limit=100)[0] for B in B_values])
+        except Exception as e:
+            print(f"Integration error: {e}")
+            N_values = np.zeros(len(B_values))
+            D_values = np.ones(len(B_values)) * 1e-10
 
-        # Clip D_values to avoid division by zero
+        # Use np.clip to protect the lower bound of D_values to avoid division by zero
         D_values = np.clip(D_values, 1e-10, None)
 
         return N_values, D_values
@@ -224,3 +238,51 @@ class DQPlus:
             f_derivative[i] = (f_forward - f_backward) / (2 * h)
 
         return f_derivative
+    
+    def update_boundary(self, B_values, max_iter=5):
+        """
+        Update the boundary values using the Jacobi-Newton scheme.
+
+        Parameters:
+        - B_values (numpy array): Current boundary values B^{(j)}(\tau_i).
+
+        Returns:
+        - B_next (numpy array): Updated boundary values B^{(j+1)}(\tau_i).
+        """
+        B_next = np.zeros(self.n)
+
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            B_current = B_values[i]
+
+            for iter_count in range(max_iter):
+
+                # Calculate f(tau, B) and f'(tau, B)
+                f_value = self.compute_f_values(tau, np.array([B_current]))[0]
+                f_derivative = self.compute_f_derivative(tau, np.array([B_current]))[0]
+
+                # Avoid division by zero
+                denominator = np.clip(f_derivative - 1.0, 1e-8, None)
+
+                # Jacobi-Newton update formula
+                numerator = B_current - f_value
+                delta_B = self.eta * (numerator / denominator)
+
+                # Update step limit
+                max_step = 0.1 * B_current
+                delta_B = np.clip(delta_B, -max_step, max_step)
+
+                # Update boundary value and check non-negativity
+                B_updated = B_current + delta_B
+                if B_updated >= 0:
+                    B_next[i] = B_updated
+                    break
+                else:
+                    # If the result is negative, decrease the step size \(\eta\)
+                    self.eta *= 0.5
+                    B_current = max(B_current, 1e-10)
+                    
+            # Ensure the boundary value is non-negative
+            B_next[i] = max(B_next[i], 1e-10)
+
+        return B_next

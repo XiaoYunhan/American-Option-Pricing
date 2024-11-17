@@ -147,5 +147,24 @@ def test_compute_f_derivative(K, r, q, vol, tau_nodes):
     # Verify numerical stability of f' values, derivatives should not be extremely large
     assert np.all(np.abs(f_derivative_values) < 100)
 
+@pytest.mark.parametrize("K, r, q, vol, tau_nodes", [
+    (100, 0.05, 0.02, 0.2, np.linspace(0, 1, 10)),
+    (120, 0.03, 0.03, 0.25, np.linspace(0, 2, 20)),
+    (80, 0.07, 0.01, 0.3, np.linspace(0, 1.5, 15)),
+])
+def test_update_boundary(K, r, q, vol, tau_nodes):
+    """
+    Test the update_boundary() method for correct boundary update using Jacobi-Newton scheme.
+    """
+    dqplus = DQPlus(K, r, q, vol, tau_nodes)
+    dqplus.initialize_boundary()
+    B_values = dqplus.get_boundary_values()
+    B_next = dqplus.update_boundary(B_values)
+
+    # Verify that the updated boundary values are non-negative and reasonable
+    assert all(B >= 0 for B in B_next), "Negative boundary value found."
+    assert all(np.isfinite(B) for B in B_next), "Non-finite boundary value found."
+    assert all(B_next[i] >= B_values[i] * 0.8 for i in range(len(B_values))), "Boundary value dropped significantly."
+
 if __name__ == "__main__":
     pytest.main(["-v"])
