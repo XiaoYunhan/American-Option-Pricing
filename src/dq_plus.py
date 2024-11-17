@@ -286,3 +286,52 @@ class DQPlus:
             B_next[i] = max(B_next[i], 1e-10)
 
         return B_next
+    
+    def run_full_algorithm(self, m=10):
+        """
+        Run the complete Jacobi-Newton iterative scheme for pricing American options.
+
+        Parameters:
+        - m (int): Number of iterations for the Jacobi-Newton scheme.
+
+        Returns:
+        - B_values (numpy array): The final boundary values after m iterations.
+        """
+        # Initialize boundary values using the approximate method (B^{(0)})
+        B_values = self.initial_boundary.copy()
+
+        for j in range(1, m + 1):
+            print(f"Starting iteration {j}/{m}")
+
+            # Step 5: Compute H(sqrt(tau)) and initialize Chebyshev interpolation
+            H_values = self.compute_H()
+            self.initialize_chebyshev_interpolation(H_values)
+
+            # Step 6: Evaluate boundary using Clenshaw algorithm at adjusted points
+            y_nodes = np.linspace(-1, 1, len(self.tau_nodes))
+            evaluated_B_values = np.zeros((self.n, len(y_nodes)))
+
+            for i in range(self.n):
+                tau = self.tau_nodes[i]
+                evaluated_B_values[i] = self.evaluate_boundary(tau, y_nodes)
+
+            # Step 7: Compute N(tau_i, B) and D(tau_i, B), then compute f(tau_i, B)
+            f_values = np.zeros(self.n)
+            for i in range(self.n):
+                tau = self.tau_nodes[i]
+                N_values, D_values = self.compute_ND_values(tau, evaluated_B_values[i])
+                f_values[i] = np.mean(N_values / D_values)
+
+            # Step 8: Compute the derivative f'(tau_i, B) for each tau_i
+            f_derivative_values = np.zeros(self.n)
+            for i in range(self.n):
+                tau = self.tau_nodes[i]
+                f_derivative_values[i] = self.compute_f_derivative(tau, np.array([B_values[i]]))[0]
+
+            # Step 9: Update B_values using the Jacobi-Newton scheme
+            B_values = self.update_boundary(B_values)
+
+            print(f"Iteration {j}/{m} completed.")
+
+        print("Jacobi-Newton iterations completed.")
+        return B_values
