@@ -3,7 +3,6 @@ from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
 from src.Option import OptionType
-
 class DQPlus:
     """
     The core class for American option pricing using DQ+ method.
@@ -11,8 +10,7 @@ class DQPlus:
     """
 
     def __init__(self, K, r, q, vol, tau_nodes,
-                 option_type='put',
-                 eta=0.5):
+                 option_type=OptionType.Put, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
