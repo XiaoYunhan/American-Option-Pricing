@@ -8,7 +8,8 @@ class OptionType(Enum):
 
 class EuropeanOption:
     def __init__(self, 
-                 S0, K, T, r, q, sigma):
+                 S0, K, T, r, q, sigma
+                 ):
         """
         Initializes a European option.
 

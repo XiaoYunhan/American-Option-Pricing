@@ -2,6 +2,7 @@ import numpy as np
 from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
+from src.Option import OptionType
 
 class DQPlus:
     """
@@ -9,7 +10,9 @@ class DQPlus:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_nodes, eta=0.5):
+    def __init__(self, K, r, q, vol, tau_nodes,
+                 option_type='put',
+                 eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -27,6 +30,7 @@ class DQPlus:
         self.tau_nodes = tau_nodes
         self.n = len(tau_nodes)
         self.eta = eta
+        self.option_type = option_type
         self.initial_boundary = np.zeros(self.n)
         self.chebyshev_interpolator = None
         self.chebyshev_coefficients = None
@@ -36,7 +40,23 @@ class DQPlus:
         Initialize the early exercise boundary using QD+ approximation.
         """
         # Initialize B^(0)(tau_0)
-        B_tau_0 = self.K * min(1, self.r / self.q) if self.q > 0 else self.K
+        # B_tau_0 = self.K * min(1, self.r / self.q) if self.q > 0 else self.K
+        # ---Adjust for B_tau_0 to improve precision---
+        if self.option_type == OptionType.Call:
+            # For Call options: Early exercise happens typically when r > q
+            if self.r > self.q:
+                B_tau_0 = self.K * (self.r / self.q)
+            else:
+                B_tau_0 = self.K
+        elif self.option_type == OptionType.Put:
+            # For Put options: Early exercise happens typically when r < q
+            if self.r < self.q:
+                B_tau_0 = self.K * (self.r / self.q)
+            else:
+                B_tau_0 = self.K
+        else:
+            raise ValueError("Invalid option type")
+        #
         self.initial_boundary[0] = B_tau_0
 
         # Estimate B^(0)(tau_i) for i = 1, ..., n using exponential decay model
