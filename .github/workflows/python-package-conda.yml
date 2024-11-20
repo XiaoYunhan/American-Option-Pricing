@@ -32,6 +32,3 @@ jobs:
       run: |
         conda install pytest
         pytest
-    - name: Python Coverage
-      uses: orgoro/coverage@v3.2
-            
