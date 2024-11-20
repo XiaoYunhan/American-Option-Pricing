@@ -10,5 +10,4 @@
 
 # Test & Cache
 .pytest_cache
-src/__pycache__
-src/tests/__pycache__
+**/__pycache__/*
