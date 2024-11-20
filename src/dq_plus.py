@@ -3,14 +3,14 @@ from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
 from src.Option import OptionType
+from src.quadrature_nodes import QuadratureNodes
 class DQPlus:
     """
     The core class for American option pricing using DQ+ method.
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_nodes,
-                 option_type=OptionType.Put, eta=0.5):
+    def __init__(self, K, r, q, vol, n, l, option_type=OptionType.Put, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -25,13 +25,21 @@ class DQPlus:
         self.r = r
         self.q = q
         self.vol = vol
-        self.tau_nodes = tau_nodes
-        self.n = len(tau_nodes)
+        self.n = n
+        self.l = l
         self.eta = eta
         self.option_type = option_type
+
         self.initial_boundary = np.zeros(self.n)
-        self.chebyshev_interpolator = None
+        self.chebyshev_interpolator = ChebyshevInterpolator(n, tau_max=1)
+        self.chebyshev_interpolator.compute_nodes()
+        self.tau_nodes = self.chebyshev_interpolator.get_nodes()[1]  # Get tau_nodes
         self.chebyshev_coefficients = None
+
+        # Initialize quadrature nodes
+        self.quadrature = QuadratureNodes(l)
+        self.quadrature.compute_legendre_nodes()
+        self.y_nodes, self.w_weights = self.quadrature.get_nodes_and_weights()
 
     def initialize_boundary(self):
         """
@@ -77,35 +85,35 @@ class DQPlus:
 
         return H_values
 
-    def fixed_point_iteration(self, max_iter=10, tol=1e-8):
-        """
-        Perform fixed-point iteration using Newton's method to refine the exercise boundary.
+    # def fixed_point_iteration(self, max_iter=10, tol=1e-8):
+    #     """
+    #     Perform fixed-point iteration using Newton's method to refine the exercise boundary.
 
-        Parameters:
-        - max_iter (int): Maximum number of iterations.
-        - tol (float): Convergence tolerance.
-        """
-        boundary_values = self.initial_boundary.copy()
+    #     Parameters:
+    #     - max_iter (int): Maximum number of iterations.
+    #     - tol (float): Convergence tolerance.
+    #     """
+    #     boundary_values = self.initial_boundary.copy()
 
-        for iteration in range(max_iter):
-            prev_boundary = boundary_values.copy()
+    #     for iteration in range(max_iter):
+    #         prev_boundary = boundary_values.copy()
 
-            # Create a new interpolator for the current boundary values
-            interpolator = BarycentricInterpolator(self.tau_nodes, boundary_values)
+    #         # Create a new interpolator for the current boundary values
+    #         interpolator = BarycentricInterpolator(self.tau_nodes, boundary_values)
 
-            for i in range(1, self.n):
-                tau = self.tau_nodes[i]
-                boundary_estimate = interpolator(tau)
+    #         for i in range(1, self.n):
+    #             tau = self.tau_nodes[i]
+    #             boundary_estimate = interpolator(tau)
 
-                # Newton's update step
-                boundary_values[i] = boundary_estimate - (boundary_estimate - prev_boundary[i]) / 2
+    #             # Newton's update step
+    #             boundary_values[i] = boundary_estimate - (boundary_estimate - prev_boundary[i]) / 2
 
-            # Check for convergence
-            max_diff = np.max(np.abs(boundary_values - prev_boundary))
-            if max_diff < tol:
-                break
+    #         # Check for convergence
+    #         max_diff = np.max(np.abs(boundary_values - prev_boundary))
+    #         if max_diff < tol:
+    #             break
 
-        self.initial_boundary = boundary_values
+    #     self.initial_boundary = boundary_values
 
     def get_boundary_values(self):
         """
@@ -159,13 +167,12 @@ class DQPlus:
 
         return z * b_curr - b_next + self.chebyshev_coefficients[0]
 
-    def evaluate_boundary(self, tau, y_nodes):
+    def evaluate_boundary(self, tau):
         """
         For each tau_i, evaluate B(tau) using Clenshaw algorithm at the adjusted points.
 
         Parameters:
         - tau (float): The current time node tau_i.
-        - y_nodes (numpy array): The quadrature nodes y_k.
 
         Returns:
         - B_values (numpy array): Evaluated boundary values at adjusted points.
@@ -174,9 +181,9 @@ class DQPlus:
             H_values = self.compute_H()
             self.initialize_chebyshev_interpolation(H_values)
 
-        B_values = np.zeros(len(y_nodes))
+        B_values = np.zeros(len(self.y_nodes))
 
-        for k, y_k in enumerate(y_nodes):
+        for k, y_k in enumerate(self.y_nodes):
             adjusted_tau = tau - tau * (1 + y_k)**2 / 4
             z = 2 * np.sqrt(adjusted_tau / np.max(self.tau_nodes)) - 1
             B_values[k] = max(self.clenshaw_algorithm(z), 1e-10)  # Ensure B_values are positive
@@ -187,37 +194,33 @@ class DQPlus:
         """
         Compute N(tau, B) and D(tau, B) using numerical quadrature.
         """
-        vol_sqrt_tau = max(self.vol * np.sqrt(tau), 1e-8) # Increase minimum value protection to avoid division by zero
+        vol_sqrt_tau = max(self.vol * np.sqrt(tau), 1e-8)  # Avoid division by zero
 
         def integrand_N(u, B):
-            if B <= 1e-10:
-                return 0.0
             exp_factor = np.exp((self.q - self.r) * u)
-            m = (np.log(max(B / self.K, 1e-10)) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
-            if not np.isfinite(m):
-                return 0.0
-            return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
+            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
+            return exp_factor * np.exp(-0.5 * m**2) / np.sqrt(2 * np.pi)
 
         def integrand_D(u, B):
-            if B <= 1e-10:
-                return 0.0
             exp_factor = np.exp(self.q * u)
-            m = (np.log(max(B / self.K, 1e-10)) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
-            if not np.isfinite(m):
-                return 0.0
-            return exp_factor * np.exp(-0.5 * m**2) / (np.sqrt(2 * np.pi))
+            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
+            return exp_factor * np.exp(-0.5 * m**2) / np.sqrt(2 * np.pi)
 
-        # Calculate N and D for each B value
-        try:
-            N_values = np.array([quad(integrand_N, 0, tau, args=(B,), limit=100)[0] for B in B_values])
-            D_values = np.array([quad(integrand_D, 0, tau, args=(B,), limit=100)[0] for B in B_values])
-        except Exception as e:
-            print(f"Integration error: {e}")
-            N_values = np.zeros(len(B_values))
-            D_values = np.ones(len(B_values)) * 1e-10
+        # Prepare adjusted tau values for quadrature
+        adjusted_tau = tau * (1 + self.y_nodes) / 2  # Adjusted for single tau
 
-        # Use np.clip to protect the lower bound of D_values to avoid division by zero
-        D_values = np.clip(D_values, 1e-10, None)
+        # Compute N and D using quadrature nodes and weights
+        N_values = []
+        D_values = []
+
+        for B in B_values:
+            N_integrals = self.w_weights * integrand_N(adjusted_tau, B)
+            D_integrals = self.w_weights * integrand_D(adjusted_tau, B)
+            N_values.append(np.sum(N_integrals))
+            D_values.append(np.sum(D_integrals))
+
+        N_values = np.array(N_values)
+        D_values = np.clip(np.array(D_values), 1e-10, None)  # Avoid division by zero
 
         return N_values, D_values
     
@@ -227,6 +230,10 @@ class DQPlus:
         """
         N_values, D_values = self.compute_ND_values(tau, B_values)
         f_values = N_values / D_values
+
+        # Return scalar for single-element input
+        if len(B_values) == 1:
+            return np.array([f_values[0]])
         return f_values
     
     def compute_f_derivative(self, tau, B_values, h=1e-5):
@@ -241,7 +248,6 @@ class DQPlus:
         Returns:
         - f_derivative (numpy array): Computed derivative values of f with respect to B.
         """
-        f_values = self.compute_f_values(tau, B_values)
         f_derivative = np.zeros(len(B_values))
 
         for i, B in enumerate(B_values):
@@ -326,17 +332,22 @@ class DQPlus:
             self.initialize_chebyshev_interpolation(H_values)
 
             # Step 6: Evaluate boundary using Clenshaw algorithm at adjusted points
-            y_nodes = np.linspace(-1, 1, len(self.tau_nodes))
-            evaluated_B_values = np.zeros((self.n, len(y_nodes)))
+            evaluated_B_values = np.zeros((self.n, self.l))
 
             for i in range(self.n):
                 tau = self.tau_nodes[i]
-                evaluated_B_values[i] = self.evaluate_boundary(tau, y_nodes)
+                evaluated_B_values[i] = self.evaluate_boundary(tau)
 
             # Step 7: Compute N(tau_i, B) and D(tau_i, B), then compute f(tau_i, B)
             f_values = np.zeros(self.n)
+            # for i in range(self.n):
+            #     tau = self.tau_nodes[i]
+            #     N_values, D_values = self.compute_ND_values(tau, evaluated_B_values[i])
+            #     f_values[i] = np.mean(N_values / D_values)
             for i in range(self.n):
                 tau = self.tau_nodes[i]
+                # evaluated_B_values[i] = self.evaluate_boundary(tau)
+
                 N_values, D_values = self.compute_ND_values(tau, evaluated_B_values[i])
                 f_values[i] = np.mean(N_values / D_values)
 

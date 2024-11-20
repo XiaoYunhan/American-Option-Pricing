@@ -1,15 +1,13 @@
-# File: src/tests/test_chebyshev_interpolator.py
-
 import pytest
 import numpy as np
 from src.chebyshev_interpolator import ChebyshevInterpolator
 
-@pytest.mark.parametrize("n, tau_max, expected_first_node, expected_last_node", [
-    (9, 1.0, 0.0, np.sqrt(2.0)),  # Expected sqrt(2.0) based on the formula
-    (5, 2.0, 0.0, np.sqrt(4.0)),  # Expected sqrt(4.0) based on the formula
-    (7, 0.5, 0.0, np.sqrt(1.0)),  # Expected sqrt(1.0) based on the formula
+@pytest.mark.parametrize("n, tau_max, a, b, expected_first_node, expected_last_node", [
+    (9, 1.0, 0.0, 1.0, 0.0, 1.0),  # Default interval [0, 1]
+    (5, 2.0, -1.0, 1.0, -1.0, 1.0),  # Interval [-1, 1]
+    (7, 0.5, 2.0, 4.0, 2.0, 4.0),  # Custom interval [2, 4]
 ])
-def test_chebyshev_interpolator_nodes(n, tau_max, expected_first_node, expected_last_node):
+def test_chebyshev_interpolator_nodes(n, tau_max, a, b, expected_first_node, expected_last_node):
     """
     Test the ChebyshevInterpolator class to ensure correct node computation.
     This test checks:
@@ -17,7 +15,7 @@ def test_chebyshev_interpolator_nodes(n, tau_max, expected_first_node, expected_
     - Correct calculation of collocation times.
     """
     interpolator = ChebyshevInterpolator(n, tau_max)
-    interpolator.compute_nodes()
+    interpolator.compute_nodes(a=a, b=b)
 
     x_nodes, tau_nodes = interpolator.get_nodes()
 
@@ -29,4 +27,3 @@ def test_chebyshev_interpolator_nodes(n, tau_max, expected_first_node, expected_
 
 if __name__ == "__main__":
     pytest.main(["-v", "src/tests/test_chebyshev_interpolator.py"])
-

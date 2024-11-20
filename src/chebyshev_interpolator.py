@@ -18,15 +18,28 @@ class ChebyshevInterpolator:
         self.x_nodes = None
         self.tau_nodes = None
 
-    def compute_nodes(self):
+    # def compute_nodes(self):
+    #     """
+    #     Compute the Chebyshev interpolation nodes and collocation times.
+    #     """
+    #     # Compute Chebyshev extrema points
+    #     z = -np.cos(np.pi * np.arange(self.n + 1) / self.n)
+        
+    #     # Compute interpolation nodes
+    #     self.x_nodes = np.sqrt(self.tau_max / 2) * (1 + z)
+        
+    #     # Compute collocation times
+    #     self.tau_nodes = self.x_nodes ** 2
+
+    def compute_nodes(self, a=0, b=1):
         """
         Compute the Chebyshev interpolation nodes and collocation times.
         """
         # Compute Chebyshev extrema points
         z = -np.cos(np.pi * np.arange(self.n + 1) / self.n)
         
-        # Compute interpolation nodes
-        self.x_nodes = np.sqrt(self.tau_max / 2) * (1 + z)
+        # Transform Chebyshev nodes to interval [a, b]
+        self.x_nodes = 0.5 * (a + b) + 0.5 * (b - a) * z
         
         # Compute collocation times
         self.tau_nodes = self.x_nodes ** 2
