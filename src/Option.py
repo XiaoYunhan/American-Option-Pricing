@@ -2,6 +2,8 @@ from scipy.stats import norm
 import numpy as np
 from enum import Enum
 
+from src.quadrature_nodes import QuadratureNodes
+
 class OptionType(Enum):
     Call = 'call'
     Put = 'put'
@@ -43,4 +45,11 @@ class EuropeanOption:
             self.S0 * np.exp(-self.q * self.T) * norm.cdf(-d1)
         )
         return price
-    
+    def call_value(self):
+        d1 = self._d1()
+        d2 = self._d2()
+        price = (
+            self.S0 * np.exp(-self.q * self.T) * norm.cdf(d1) -
+            self.K * np.exp(-self.r * self.T) * norm.cdf(d2)
+        )
+        return price
