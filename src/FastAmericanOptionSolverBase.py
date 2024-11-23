@@ -48,7 +48,7 @@ class AmericanOptionSolver(ABC):
         self.option_type = option_type
 
         # points and weights for Guassian integration
-        qd = QuadratureNodes(self.p)
+        qd = QuadratureNodes(self.l)
         qd.compute_legendre_nodes()
         self.y, self.w = qd.get_nodes_and_weights()
 
