@@ -363,4 +363,4 @@ class DQPlus:
             print(f"Iteration {j}/{m} completed.")
 
         print("Jacobi-Newton iterations completed.")
-        return B_values
+        return tau, B_values
