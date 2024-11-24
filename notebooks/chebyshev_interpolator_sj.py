@@ -1,6 +1,6 @@
 import numpy as np
 
-class ChebyshevInterpolator:
+class ChebyshevInterpolation:
     """
     This class handles the computation of Chebyshev interpolation nodes
     and collocation times for American option pricing.
@@ -15,31 +15,20 @@ class ChebyshevInterpolator:
     def __init__(self, n, tau_max):
         self.n = n
         self.tau_max = tau_max
+        self.z_nodes = None
         self.x_nodes = None
         self.tau_nodes = None
 
-    # def compute_nodes(self):
-    #     """
-    #     Compute the Chebyshev interpolation nodes and collocation times.
-    #     """
-    #     # Compute Chebyshev extrema points
-    #     z = -np.cos(np.pi * np.arange(self.n + 1) / self.n)
-        
-    #     # Compute interpolation nodes
-    #     self.x_nodes = np.sqrt(self.tau_max / 2) * (1 + z)
-        
-    #     # Compute collocation times
-    #     self.tau_nodes = self.x_nodes ** 2
-
-    def compute_nodes(self, a=0, b=1):
+    def compute_nodes(self):
         """
         Compute the Chebyshev interpolation nodes and collocation times.
         """
         # Compute Chebyshev extrema points
-        z = -np.cos(np.pi * np.arange(self.n + 1) / self.n)
+        z = np.cos(np.pi * np.arange(self.n + 1) / self.n)
+        self.z_nodes = z
         
-        # Transform Chebyshev nodes to interval [a, b]
-        self.x_nodes = 0.5 * (a + b) + 0.5 * (b - a) * z
+        # Compute interpolation nodes
+        self.x_nodes = np.sqrt(self.tau_max)/2 * (1 + z)
         
         # Compute collocation times
         self.tau_nodes = self.x_nodes ** 2
@@ -53,10 +42,3 @@ class ChebyshevInterpolator:
         
         return self.x_nodes, self.tau_nodes
 
-# Suggests that compute_nodes to be in the form below (Previous one had typo np.sqrt(self.tau_max / 2), it should be np.sqrt(self.tau_max)/2)
-# 
-#  def compute_nodes(self):
-#       z = -np.cos(np.pi * np.arange(self.n + 1) / self.n)
-#       self.x_nodes = np.sqrt(self.tau_max) / 2 * (1 + z)
-#       self.tau_nodes = self.x_nodes ** 2
-#
