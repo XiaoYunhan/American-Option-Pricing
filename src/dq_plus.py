@@ -13,7 +13,7 @@ class AmericanOptionPricing:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_max, n, l, option_type=OptionType.Put, eta=0.1):
+    def __init__(self, K, r, q, vol, tau_max, n, l, option_type=OptionType.Put, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -281,7 +281,7 @@ class AmericanOptionPricing:
     def fprime(self):
         self.f_prime = self.K*np.exp(-(self.r-self.q)*self.tau_nodes[:-1])*(self.N_prime/self.D_values - self.D_prime*self.N_values/(np.square(self.D_values)))
     
-    def update_boundary(self, max_iter=100):
+    def update_boundary(self):
         """
         Update the boundary values using the Jacobi-Newton scheme.
 
@@ -292,40 +292,29 @@ class AmericanOptionPricing:
         - B_next (numpy array): Updated boundary values B^{(j+1)}(\tau_i).
         """
         B_next = np.zeros(self.n+1)
-
+        
         for i in range(self.n):
             tau = self.tau_nodes[i]
             B_current = self.updateded_boundary[i]
 
-            for iter_count in range(max_iter):
+            # Calculate f(tau, B) and f'(tau, B)
+            f_value = self.f_values[i]
+            f_derivative = self.f_prime[i]
 
-                # Calculate f(tau, B) and f'(tau, B)
-                f_value = self.f_values[i]
-                f_derivative = self.f_prime[i]
+            # Avoid division by zero
+            denominator = f_derivative - 1.0
+            if denominator == 0:
+                denominator = 1e-20
 
-                # Avoid division by zero
-                denominator = np.clip(f_derivative - 1.0, 1e-8, None)
+            # Jacobi-Newton update formula
+            numerator = B_current - f_value
+            delta_B = self.eta * (numerator / denominator)
 
-                # Jacobi-Newton update formula
-                numerator = B_current - f_value
-                delta_B = self.eta * (numerator / denominator)
+            # Update boundary value 
+            B_current = B_current + delta_B
 
-                # Update step limit
-                max_step = 0.1 * B_current
-                delta_B = np.clip(delta_B, -max_step, max_step)
-
-                # Update boundary value and check non-negativity
-                B_updated = B_current + delta_B
-                if B_updated >= 0:
-                    B_next[i] = B_updated
-                    break
-                else:
-                    # If the result is negative, decrease the step size \(\eta\)
-                    self.eta *= 0.5
-                    B_current = max(B_current, 1e-10)
-                    
             # Ensure the boundary value is non-negative
-            B_next[i] = max(B_next[i], 1e-10)
+            B_next[i] = max(B_current, 1e-10)
         B_next[self.n] = self.updateded_boundary[self.n]
         return B_next
     
@@ -387,6 +376,7 @@ class AmericanOptionPricing:
         self.fprime()
 
         # Step 9: Update B_values using the Jacobi-Newton scheme
+        self.initial_boundary = self.updateded_boundary
         self.updateded_boundary = self.update_boundary()
         print("Jacobi-Newton iterations completed.")
         print(self.updateded_boundary)
@@ -411,6 +401,7 @@ class AmericanOptionPricing:
         self.fprime()
 
         # Step 9: Update B_values using the Jacobi-Newton scheme
+        self.initial_boundary = self.updateded_boundary
         self.updateded_boundary = self.update_boundary()
         print("Jacobi-Newton iterations completed.")
         print(self.updateded_boundary)
