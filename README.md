@@ -3,7 +3,23 @@
 ## Project Requirement
 1. Implement Spectral Collocation Method for pricing American options
 2. Replicate Table 2 in the paper [High Performance American Option Pricing](/docs/High_Performance_American_Option_Pricing.pdf)
-![Table2](./plot/table2.jpg)
+<!-- ![Table2](./plot/table2.jpg) -->
+| (l, m, n)  | p   | American Premium  | Relative Error | CPU Seconds |
+|------------|------|-------------------|----------------|-------------|
+| (5, 1, 4)  | 15   | 0.106783919132    | 1.5E-03        | 9.9E-06     |
+| (7, 2, 5)  | 20   | 0.106934846948    | 1.7E-04        | 2.3E-05     |
+| (11, 2, 5) | 31   | 0.106939863585    | 1.2E-04        | 3.1E-05     |
+| (15, 2, 6) | 41   | 0.106954833468    | 2.0E-05        | 4.5E-05     |
+| (15, 3, 7) | 41   | 0.106952928838    | 2.1E-06        | 7.1E-05     |
+| (25, 4, 9) | 51   | 0.106952731254    | 2.7E-07        | 1.7E-04     |
+| (25, 5, 12)| 61   | 0.106952704598    | 1.7E-08        | 2.9E-04     |
+| (25, 6, 15)| 61   | 0.106952703049    | 2.8E-09        | 4.6E-04     |
+| (35, 8, 16)| 81   | 0.106952702764    | 1.6E-10        | 8.4E-04     |
+| (51, 8, 24)| 101  | 0.106952702748    | 1.5E-11        | 2.1E-03     |
+| (65, 8, 32)| 101  | 0.106952702747    | 8.5E-13        | 3.0E-03     |
+
+*Table 2*: Estimated 1-year American premium for \( K = S = 100 \). Model settings were \( r = q = 5\% \) and \( \sigma = 0.25 \). All numbers were computed using fixed point system A, with \( (l, m, n) \) and \( p \) as given in the table. Relative errors are measured against the American premium computed with \( (l, m, n) = (201, 16, 64) \) and \( p = 201 \). Results for \( (l, m, n) = (5, 1, 4) \) and \( (l, m, n) = (7, 2, 5) \) were computed with Gauss-Legendre quadrature; all other results were computed with tanh-sinh quadrature.
+
 1. Analyze the results in terms of accuracy, numerical stability and convergence speed for the difference choices of model parameters l, m, n and spot price S, interest rate r, dividend q and time to maturity τ .
 2. (optional) Implement Crank-Nicolson method and compare it with Spectral Collocation Method.
 
