@@ -42,3 +42,21 @@ class QuadratureNodes:
             raise ValueError("Nodes and weights have not been computed yet. Call compute_legendre_nodes() first.")
         
         return self.y_nodes, self.w_weights
+    
+    def compute_tanh_sinh_nodes(self):
+        """
+        Compute the Tanh_sinh quadrature nodes and weights.
+        """
+        n = self.l
+        nodes = np.zeros(n)
+        weights = np.zeros(n)
+
+        # Compute the nodes and weights
+        for k in range(n):
+            # Compute the k-th node
+            nodes[k] = np.tanh(np.pi * (k + 0.5) / n)
+
+            # Compute the weight for the k-th node
+            weights[k] = (np.pi / n) / (np.cosh(np.pi * (k + 0.5) / n) ** 2)
+
+        self.y_nodes, self.w_weights = nodes, weights

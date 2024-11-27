@@ -3,7 +3,7 @@ from scipy.stats import norm
 from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
-from src.Option import OptionType
+from src.Option import OptionType, EuropeanOption
 from src.quadrature_nodes import QuadratureNodes
 from src.utils import QDplus
 
@@ -13,7 +13,7 @@ class AmericanOptionPricing:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_max, n, l,p, option_type=OptionType.Put, eta=0.5):
+    def __init__(self, K, r, q, vol, tau_max, l, m, n, p, option_type=OptionType.Put, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -29,11 +29,13 @@ class AmericanOptionPricing:
         self.q = q
         self.vol = vol
         self.n = n
+        self.m = m
         self.l = l
         self.eta = eta
         self.option_type = option_type
         self.X = self.K * min(1, self.r/self.q)
         self.tau_max = tau_max
+        self.iteration_no = 0
 
         self.initial_boundary = np.zeros(self.n+1)
         self.updateded_boundary = np.zeros(self.n+1)
@@ -88,8 +90,8 @@ class AmericanOptionPricing:
         # Step 1: Compute European option price
         tau = self.tau_max
 
-        european_price = self.K * np.exp(-self.r * self.tau_max) * norm.cdf(self.d2(tau, S/self.K)) - S * np.exp(-self.q * tau) * norm.cdf(-self.d1(tau,S/self.K))
-        
+        european_price = EuropeanOption.european_put_value(self.tau_max, S, self.r, self.q, self.vol, self.K)
+
         integral1 = self.compute_pricing_integral_1(S)
         integral2 = self.compute_pricing_integral_2(S)
 
@@ -216,7 +218,7 @@ class AmericanOptionPricing:
             
             # Use the quadrature nodes obtained in the quadacture earlier
             for k, y_k in enumerate(self.y_nodes):
-                adjusted_tau = tau - tau * (1 + y_k)**2 / 4               # Obtain the adjusted tau for each y_k, but the adjusted tau cannot be negative
+                adjusted_tau = tau - tau * (1 + y_k)**2 / 4              # Obtain the adjusted tau for each y_k, but the adjusted tau cannot be too small
                 z = 2 * np.sqrt(adjusted_tau / self.tau_max) - 1             # From the tau obtain the z value
                 qz_interpolated[k] = max(self.clenshaw_algorithm(z, self.chebyshev_coefficients),0) # Interpolate qz using the clenshaw algorithm
 
@@ -237,7 +239,7 @@ class AmericanOptionPricing:
         K1integrads = np.zeros(k)
 
         for i,yk in enumerate(yk_nodes):
-            term0 = 0.25 * tau * (1 + yk)**2
+            term0 = tau * (1 + yk)**2 / 4
             term1 = np.exp(-self.q * term0)
             term2 = (1 + yk)
             term3 = norm.cdf(self.d1(term0, B / B_y[i]))
@@ -266,7 +268,7 @@ class AmericanOptionPricing:
         for i in range(self.n):
             tau = self.tau_nodes[i]
             integrad = self.K2_integrad(tau, self.updateded_boundary[i], self.y_nodes, self.B_yk[i])
-            self.k2[i] = tau*np.exp(self.q*tau)*sum(integrad*self.w_weights)
+            self.k2[i] = np.sqrt(tau)*np.exp(self.q*tau)*sum(integrad*self.w_weights)
 
     def K3_integrand(self, tau, B_tau, yk_nodes, B_y):
         k = len(yk_nodes)
@@ -283,7 +285,7 @@ class AmericanOptionPricing:
         for i in range(self.n):
             tau = self.tau_nodes[i]
             integrad = self.K3_integrand(tau, self.updateded_boundary[i], self.y_nodes, self.B_yk[i])
-            self.k3[i] = tau*np.exp(self.r*tau)*sum(integrad*self.w_weights)
+            self.k3[i] = np.sqrt(tau)*np.exp(self.r*tau)*sum(integrad*self.w_weights)
 
     def compute_ND_values(self):
         """
@@ -318,7 +320,10 @@ class AmericanOptionPricing:
         self.D_prime = -self.d2(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K) * norm.pdf(self.d1(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K)) / (self.updateded_boundary[:-1] * self.vol * self.vol * self.tau_nodes[:-1])
 
     def fprime(self):
-        self.f_prime = self.K*np.exp(-(self.r-self.q)*self.tau_nodes[:-1])*(self.N_prime/self.D_values - self.D_prime*self.N_values/(np.square(self.D_values)))
+        if self.iteration_no == 0:
+            self.f_prime = self.K*np.exp(-(self.r-self.q)*self.tau_nodes[:-1])*(self.N_prime/self.D_values - self.D_prime*self.N_values/np.square(self.D_values) )
+        else:
+            self.f_prime = np.zeros(len(self.tau_nodes[:-1]))
     
     def update_boundary(self):
         """
@@ -357,7 +362,7 @@ class AmericanOptionPricing:
         B_next[self.n] = self.updateded_boundary[self.n]
         return B_next
     
-    def run_full_algorithm(self, m=2):
+    def run_full_algorithm(self):
         """
         Run the complete Jacobi-Newton iterative scheme for pricing American options.
 
@@ -368,8 +373,8 @@ class AmericanOptionPricing:
         - B_values (numpy array): The final boundary values after m iterations.
         """
         self.initialize_boundary()
-        for j in range(1, m + 1):
-            print(f"Starting iteration {j}/{m}")
+        for j in range(1, self.m + 1):
+            print(f"Starting iteration {j}/{self.m}")
 
             # Step 5: Compute H(sqrt(tau)) and initialize Chebyshev interpolation
             H_values = self.compute_H()
@@ -391,7 +396,7 @@ class AmericanOptionPricing:
             # Step 9: Update B_values using the Jacobi-Newton scheme
             self.updateded_boundary = self.update_boundary()
 
-            print(f"Iteration {j}/{m} completed.")
+            print(f"Iteration {j}/{self.m} completed.")
 
         print("Jacobi-Newton iterations completed.")
 
@@ -419,6 +424,7 @@ class AmericanOptionPricing:
         self.updateded_boundary = self.update_boundary()
         print("Jacobi-Newton iterations completed.")
         print(self.updateded_boundary)
+        self.iteration_no = 1
 
     
     ## Manually run once more for testing
@@ -444,6 +450,7 @@ class AmericanOptionPricing:
         self.updateded_boundary = self.update_boundary()
         print("Jacobi-Newton iterations completed.")
         print(self.updateded_boundary)
+        self.iteration_no += 1
 
 
 
