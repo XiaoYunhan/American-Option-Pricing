@@ -13,7 +13,7 @@ class AmericanOptionPricing:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_max, n, l, option_type=OptionType.Put, eta=0.5):
+    def __init__(self, K, r, q, vol, tau_max, n, l,p, option_type=OptionType.Put, eta=0.5):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -57,6 +57,45 @@ class AmericanOptionPricing:
         self.quadrature = QuadratureNodes(l)
         self.quadrature.compute_legendre_nodes()
         self.y_nodes, self.w_weights = self.quadrature.get_nodes_and_weights()
+
+        # Initialize quadrature nodes for calculation of American Option Price
+        self.pricing_quadrature = QuadratureNodes(p)
+        self.pricing_quadrature.compute_legendre_nodes()
+        self.yp_nodes, self.wp_weights = self.pricing_quadrature.get_nodes_and_weights()
+        self.u = 0.5*self.tau_max*(1+self.yp_nodes)
+        self.Bu_pricing = None
+
+    ## For American Option pricing
+
+    ### Transform (4) to be interval of [-1,1]
+    def compute_pricing_points(self):
+        H_values = self.compute_H()
+        self.initialize_chebyshev_interpolation(H_values)
+        qp_interpolated = np.zeros(len(self.yp_nodes))
+        z = 2 * np.sqrt(self.u / self.tau_max) - 1 # From the tau obtain the z value
+        z_pricing = np.zeros(len(self.yp_nodes))
+        for i in range(len(self.yp_nodes)):
+            z_pricing[i] = max(self.clenshaw_algorithm(z[i], self.chebyshev_coefficients),0)
+        self.Bu_pricing = self.q_to_B(z_pricing)        
+
+    def compute_pricing_integral_1(self,S):
+       return np.exp(-self.r*(self.tau_max - self.u))*norm.cdf(-self.d2(self.tau_max -self.u, S/self.Bu_pricing))
+
+    def compute_pricing_integral_2(self,S):        
+       return np.exp(-self.q*(self.tau_max - self.u))*norm.cdf(-self.d1(self.tau_max -self.u, S/self.Bu_pricing))
+    
+    def compute_option_pricing(self,S):
+        # Step 1: Compute European option price
+        tau = self.tau_max
+
+        european_price = self.K * np.exp(-self.r * self.tau_max) * norm.cdf(self.d2(tau, S/self.K)) - S * np.exp(-self.q * tau) * norm.cdf(-self.d1(tau,S/self.K))
+        
+        integral1 = self.compute_pricing_integral_1(S)
+        integral2 = self.compute_pricing_integral_2(S)
+
+        american_premium = self.r*self.K*tau*0.5*sum(self.wp_weights*integral1) - self.q*S*tau*0.5*sum(self.wp_weights*integral2)
+        return european_price, american_premium
+
 
     def initialize_boundary(self):
         """
@@ -318,7 +357,7 @@ class AmericanOptionPricing:
         B_next[self.n] = self.updateded_boundary[self.n]
         return B_next
     
-    def run_full_algorithm(self, m=10):
+    def run_full_algorithm(self, m=2):
         """
         Run the complete Jacobi-Newton iterative scheme for pricing American options.
 
