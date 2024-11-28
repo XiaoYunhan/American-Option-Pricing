@@ -6,6 +6,11 @@ from src.chebyshev_interpolator import ChebyshevInterpolator
 from src.Option import OptionType, EuropeanOption
 from src.quadrature_nodes import QuadratureNodes
 from src.utils import QDplus
+from enum import Enum
+
+class QuadratureType(Enum):
+    Gauss_Legendre = 'GL'
+    tanh_sinh = 'TS'
 
 class AmericanOptionPricing:
     """
@@ -13,7 +18,11 @@ class AmericanOptionPricing:
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, tau_max, l, m, n, p, option_type=OptionType.Put, eta=0.5):
+    def __init__(self, K, r, q, vol, tau_max, l, m, n, p,
+                 option_type=OptionType.Put,
+                 quadrature_type=QuadratureType.tanh_sinh,
+                 eta=0.5
+    ):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -31,6 +40,7 @@ class AmericanOptionPricing:
         self.n = n
         self.m = m
         self.l = l
+        self.p = p
         self.eta = eta
         self.option_type = option_type
         self.X = self.K * min(1, self.r/self.q)
@@ -61,8 +71,11 @@ class AmericanOptionPricing:
         self.y_nodes, self.w_weights = self.quadrature.get_nodes_and_weights()
 
         # Initialize quadrature nodes for calculation of American Option Price
-        self.pricing_quadrature = QuadratureNodes(p)
-        self.pricing_quadrature.compute_legendre_nodes()
+        self.pricing_quadrature = QuadratureNodes(self.p)
+        if quadrature_type == QuadratureType.Gauss_Legendre:
+            self.pricing_quadrature.compute_legendre_nodes()
+        else:
+            self.pricing_quadrature.compute_tanh_sinh_nodes_weights()
         self.yp_nodes, self.wp_weights = self.pricing_quadrature.get_nodes_and_weights()
         self.u = 0.5*self.tau_max*(1+self.yp_nodes)
         self.Bu_pricing = None
@@ -74,10 +87,10 @@ class AmericanOptionPricing:
         H_values = self.compute_H()
         self.initialize_chebyshev_interpolation(H_values)
         qp_interpolated = np.zeros(len(self.yp_nodes))
-        z = 2 * np.sqrt(self.u / self.tau_max) - 1 # From the tau obtain the z value
+        self.z = 2 * np.sqrt(self.u / self.tau_max) - 1 # From the tau obtain the z value
         z_pricing = np.zeros(len(self.yp_nodes))
         for i in range(len(self.yp_nodes)):
-            z_pricing[i] = max(self.clenshaw_algorithm(z[i], self.chebyshev_coefficients),0)
+            z_pricing[i] = max(self.clenshaw_algorithm(self.z[i], self.chebyshev_coefficients),0)
         self.Bu_pricing = self.q_to_B(z_pricing)        
 
     def compute_pricing_integral_1(self,S):
