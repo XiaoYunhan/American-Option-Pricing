@@ -75,7 +75,7 @@ The project includes:
 This implementation offers a robust framework for evaluating American options using state-of-the-art numerical methods.
 
 ### Project Structure
-
+```
 AMERICAN-OPTION-PRICING/
 │
 ├── .github/
@@ -108,7 +108,7 @@ AMERICAN-OPTION-PRICING/
 ├── environment.yml                         # Conda environment file specifying dependencies for the project.
 ├── pytest.ini                              # Configuration file for `pytest`.
 ├── README.md                               # Documentation for project overview, usage, and structure.
-
+```
 
 ## Spectral Collocation Method for American Option Pricing
 
