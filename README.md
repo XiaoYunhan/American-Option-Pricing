@@ -124,6 +124,83 @@ The Spectral Collocation Method combined with the Jacobi-Newton scheme provides:
 
 This approach is well-suited for pricing American options where accurate determination of the early exercise boundary is critical.
 
+# Crank-Nicolson Method for American Option Pricing
+
+## Overview
+This project implements the **Crank-Nicolson method** to price **American options** using finite difference techniques. The method solves the Black-Scholes Partial Differential Equation (PDE) with early exercise constraints applied using **Projected Successive Over-Relaxation (PSOR)**.
+
+The Crank-Nicolson method is a second-order, implicit time-stepping scheme that is stable and efficient for pricing options. The solver is flexible and supports both **call** and **put** options with user-defined parameters for grid size, time step, and boundary conditions.
+
+---
+
+## Steps of the Algorithm
+1. **Discretize the PDE**:
+   Transform the Black-Scholes PDE:
+   $\frac{\partial V}{\partial t} + \frac{1}{2} \sigma^2 S^2 \frac{\partial^2 V}{\partial S^2} + (r - q) S \frac{\partial V}{\partial S} - rV = 0$
+   into a tridiagonal system of equations using the transformation $\( x = \ln(S) \)$.
+
+2. **Set Initial and Boundary Conditions**:
+   - Initial condition: Payoff at \( t = T \):
+     $V(S, T) = \max(K - S, 0) \quad \text{(Put)}, \quad V(S, T) = \max(S - K, 0) \quad \text{(Call)}.$
+   - Boundary conditions at $\( S \to 0 \)$ and $\( S \to \infty \)$ are derived based on option type and time decay.
+
+3. **Iterate Backwards in Time**:
+   - Solve the discretized equations for each time step $\( t \)$ using the Crank-Nicolson scheme:
+     $A X^{n+1} = B X^n$,
+     where $\( A \)$ and $\( B \)$ are tridiagonal matrices.
+
+4. **Apply Early Exercise Constraints**:
+   Ensure the option price satisfies the early exercise condition:
+   $V(S, t) \geq \max(K - S, 0) \quad \text{(Put)}, \quad V(S, t) \geq \max(S - K, 0) \quad \text{(Call)}.$
+
+5. **Output the Results**:
+   Interpolate the final option prices for any input stock price $\( S_0 \)$.
+
+---
+
+## Code Structure
+1. **Class: `CrankNicolsonSolver`**
+   - Encapsulates the entire Crank-Nicolson method, including grid setup, time-stepping, and PSOR.
+
+2. **Key Methods**:
+   - `__init__`: Initializes parameters and grids.
+   - `solve(S0)`: Computes the option price for a given stock price $\( S_0 \)$.
+   - `solvePDE()`: Iterates backward in time to solve the PDE.
+   - `setInitialCondition()`: Sets the payoff at maturity.
+   - `setCoeff(dt, t)`: Sets up the tridiagonal matrix coefficients.
+   - `solveLinearSystem()`: Solves the linear system using a banded matrix solver.
+   - `solvePSOR()`: Applies PSOR to enforce early exercise constraints.
+
+3. **Dependencies**:
+   - `numpy` for numerical operations.
+   - `scipy.linalg` for solving tridiagonal systems.
+
+---
+
+## Example Usage
+
+```python
+from crank_nicolson import CrankNicolsonSolver
+
+# Initialize solver
+option_type = "put"  # Change to "call" for call options
+solver = CrankNicolsonSolver(
+    riskfree=0.05,         # Risk-free rate (5%)
+    dividend=0.02,         # Dividend yield (2%)
+    volatility=0.2,        # Volatility (20%)
+    strike=50,             # Strike price
+    maturity=1,            # Time to maturity (1 year)
+    option_type=option_type
+)
+solver.max_dt = 0.01       # Maximum time step
+solver.USE_PSOR = True     # Enable PSOR for early exercise
+
+# Solve for option price
+S0 = 50
+price = solver.solve(S0)
+print(f"The {option_type} option price for S0 = {S0} is: {price:.2f}")
+```
+
 ## Reference
 https://github.com/antdvid/FastAmericanOptionPricing
 
