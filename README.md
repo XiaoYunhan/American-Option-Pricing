@@ -74,6 +74,41 @@ The project includes:
 
 This implementation offers a robust framework for evaluating American options using state-of-the-art numerical methods.
 
+### Project Structure
+
+AMERICAN-OPTION-PRICING/
+│
+├── .github/
+│   └── workflows/
+│       └── python-package-conda.yml        # GitHub Actions workflow for continuous integration and testing.
+│
+├── docs/                                   # Reference research paper for algorithm implementation.
+│
+├── notebooks/                              # Jupyter notebooks for exploratory analysis and implementation testing.
+│   ├── compute_table2.ipynb                # Notebook to replicate results in Table 2 from the paper.
+│   └── CrankNicolson.ipynb                 # Crank-Nicolson method implementation and testing.
+│
+├── plot/                                   # Directory for saving plots or visualization results (optional).
+│   └── [Plot-related files or scripts]
+│
+├── src/                                    # Main source code directory for the project.
+│   ├── chebyshev_interpolator.py           # Chebyshev node generation and interpolation implementation.
+│   ├── dq_plus.py                          # QD+ method for approximating the initial exercise boundary.
+│   ├── Option.py                           # European and American option pricing utilities.
+│   ├── quadrature_nodes.py                 # Quadrature nodes and weights for numerical integration.
+│   └── utils.py                            # General-purpose utility functions for the project.
+│
+├── tests/                                  # Unit tests for each core functionality in `src`.
+│   ├── test_chebyshev_interpolator.py      # Unit tests for `chebyshev_interpolator.py`.
+│   ├── test_dq_plus.py                     # Unit tests for `dq_plus.py`.
+│   ├── test_quadrature_nodes.py            # Unit tests for `quadrature_nodes.py`.
+│   └── test_spectral_collocation.py        # Unit tests for the Spectral Collocation Method.
+│
+├── .gitignore                              # Specifies files and directories to ignore in version control.
+├── environment.yml                         # Conda environment file specifying dependencies for the project.
+├── pytest.ini                              # Configuration file for `pytest`.
+├── README.md                               # Documentation for project overview, usage, and structure.
+
 
 ## Spectral Collocation Method for American Option Pricing
 
