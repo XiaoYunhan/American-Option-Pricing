@@ -98,7 +98,8 @@ Given fixed values of $\( l, m, n \)$, the algorithm can be summarized as follow
    Generate or look up the quadrature nodes $\( y_k \)$ and weights$ \( w_k \)$, for $\( k = 1, \ldots, l \).$
 
 3. **Establish Initial Guess**:
-   Initialize the early exercise boundary using an approximate method (e.g., $\( QD^+ \)$):
+   Initialize the early exercise boundary using an approximate method (e.g., \( QD^+ \)):
+   
    $B^{(0)}(\tau_i) = K \min \left\{1, \frac{r}{q}\right\}, \quad \tau_0 = 0, \tau_n = \tau_{\text{max}}$
 
 4. **Iterative Refinement**:
