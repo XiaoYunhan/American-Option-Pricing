@@ -46,7 +46,7 @@ The complete algorithm involves the following steps:
    - These values are used to determine the function $f(\tau, B)$, which is central to the fixed-point iteration scheme.
 
 7. **Compute the Derivative of $f(\tau_i, B)$**:
-   - We approximate the derivative $f'(\tau, B)$ using finite differences.
+   - We use the closed form solution for Derivative of f 
    - This derivative is critical for the Jacobi-Newton update step.
 
 8. **Update Boundary Values Using Jacobi-Newton Scheme**:
