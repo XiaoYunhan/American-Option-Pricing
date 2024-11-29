@@ -99,7 +99,7 @@ Given fixed values of $\( l, m, n \)$, the algorithm can be summarized as follow
 
 3. **Establish Initial Guess**:
    Initialize the early exercise boundary using an approximate method (e.g., $\( QD^+ \)$):
-   $B^{(0)}(\tau_i) = K \min \left\{ 1, \frac{r}{q} \right\}, \quad \tau_0 = 0, \tau_n = \tau_{\text{max}}$
+   $B^{(0)}(\tau_i) = K \min \{ 1, \frac{r}{q} \}, \quad \tau_0 = 0, \tau_n = \tau_{\text{max}}$
 
 4. **Iterative Refinement**:
    For $\( j = 1 \)$ to $\( j = m \)$:
