@@ -1,16 +1,28 @@
 import numpy as np
+from scipy.stats import norm
 from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
 from src.chebyshev_interpolator import ChebyshevInterpolator
-from src.Option import OptionType
+from src.Option import OptionType, EuropeanOption
 from src.quadrature_nodes import QuadratureNodes
-class DQPlus:
+from src.utils import QDplus
+from enum import Enum
+
+class QuadratureType(Enum):
+    Gauss_Legendre = 'GL'
+    tanh_sinh = 'TS'
+
+class AmericanOptionPricing:
     """
     The core class for American option pricing using DQ+ method.
     This class handles initialization of exercise boundary, fixed-point iteration, and interpolation.
     """
 
-    def __init__(self, K, r, q, vol, n, l, option_type=OptionType.Put, eta=0.5):
+    def __init__(self, K, r, q, vol, tau_max, l, m, n, p,
+                 option_type=OptionType.Put,
+                 quadrature_type=QuadratureType.tanh_sinh,
+                 eta=0.5
+    ):
         """
         Initialize the DQPlus engine with option parameters and collocation nodes.
 
@@ -26,24 +38,83 @@ class DQPlus:
         self.q = q
         self.vol = vol
         self.n = n
+        self.m = m
         self.l = l
+        self.p = p
         self.eta = eta
         self.option_type = option_type
+        self.X = self.K * min(1, self.r/self.q)
+        self.tau_max = tau_max
+        self.iteration_no = 0
 
-        self.initial_boundary = np.zeros(self.n)
-        self.chebyshev_interpolator = ChebyshevInterpolator(n, tau_max=1)
+        self.initial_boundary = np.zeros(self.n+1)
+        self.updateded_boundary = np.zeros(self.n+1)
+        self.updateded_boundary_q_values = None
+        self.chebyshev_interpolator = ChebyshevInterpolator(n, tau_max)
         self.chebyshev_interpolator.compute_nodes()
         self.tau_nodes = self.chebyshev_interpolator.get_nodes()[1]  # Get tau_nodes
         self.chebyshev_coefficients = None
+        self.B_yk = None
+        self.k1 = np.zeros(self.n)
+        self.k2 = np.zeros(self.n)
+        self.k3 = np.zeros(self.n)
+        self.N_values = np.zeros(self.n)
+        self.D_values = np.zeros(self.n)
+        self.f_values = np.zeros(self.n)
+        self.N_prime = np.zeros(self.n)
+        self.D_prime = np.zeros(self.n)
+        self.f_prime = np.zeros(self.n)
 
         # Initialize quadrature nodes
         self.quadrature = QuadratureNodes(l)
         self.quadrature.compute_legendre_nodes()
         self.y_nodes, self.w_weights = self.quadrature.get_nodes_and_weights()
 
+        # Initialize quadrature nodes for calculation of American Option Price
+        self.pricing_quadrature = QuadratureNodes(self.p)
+        if quadrature_type == QuadratureType.Gauss_Legendre:
+            self.pricing_quadrature.compute_legendre_nodes()
+        else:
+            self.pricing_quadrature.compute_tanh_sinh_nodes_weights()
+        self.yp_nodes, self.wp_weights = self.pricing_quadrature.get_nodes_and_weights()
+        self.u = 0.5*self.tau_max*(1+self.yp_nodes)
+        self.Bu_pricing = None
+
+    ## For American Option pricing
+
+    ### Transform (4) to be interval of [-1,1]
+    def compute_pricing_points(self):
+        H_values = self.compute_H()
+        self.initialize_chebyshev_interpolation(H_values)
+        qp_interpolated = np.zeros(len(self.yp_nodes))
+        self.z = 2 * np.sqrt(self.u / self.tau_max) - 1 # From the tau obtain the z value
+        z_pricing = np.zeros(len(self.yp_nodes))
+        for i in range(len(self.yp_nodes)):
+            z_pricing[i] = max(self.clenshaw_algorithm(self.z[i], self.chebyshev_coefficients),0)
+        self.Bu_pricing = self.q_to_B(z_pricing)        
+
+    def compute_pricing_integral_1(self,S):
+       return np.exp(-self.r*(self.tau_max - self.u))*norm.cdf(-self.d2(self.tau_max -self.u, S/self.Bu_pricing))
+
+    def compute_pricing_integral_2(self,S):        
+       return np.exp(-self.q*(self.tau_max - self.u))*norm.cdf(-self.d1(self.tau_max -self.u, S/self.Bu_pricing))
+    
+    def compute_option_pricing(self,S):
+        # Step 1: Compute European option price
+        tau = self.tau_max
+
+        european_price = EuropeanOption.european_put_value(self.tau_max, S, self.r, self.q, self.vol, self.K)
+
+        integral1 = self.compute_pricing_integral_1(S)
+        integral2 = self.compute_pricing_integral_2(S)
+
+        american_premium = self.r*self.K*tau*0.5*sum(self.wp_weights*integral1) - self.q*S*tau*0.5*sum(self.wp_weights*integral2)
+        return european_price, american_premium
+
+
     def initialize_boundary(self):
         """
-        Initialize the early exercise boundary using QD+ approximation.
+        Initialize the early exercise boundary using QD+ approximation and compute the Chebyshev_coefficients (a_k)
         """
         # Initialize B^(0)(tau_0)
         # B_tau_0 = self.K * min(1, self.r / self.q) if self.q > 0 else self.K
@@ -62,14 +133,15 @@ class DQPlus:
                 B_tau_0 = self.K
         else:
             raise ValueError("Invalid option type")
-        #
-        self.initial_boundary[0] = B_tau_0
+        
+        a=QDplus(self.r, self.q, self.vol, self.K, self.option_type)
 
-        # Estimate B^(0)(tau_i) for i = 1, ..., n using exponential decay model
-        for i in range(1, self.n):
-            decay_factor = np.exp(-self.r * self.tau_nodes[i])
-            self.initial_boundary[i] = B_tau_0 * decay_factor
-    
+        for i in range(len(self.tau_nodes)):
+            self.initial_boundary[i] = a.compute_exercise_boundary(self.tau_nodes[i])
+        
+        # make copy of the intial boundary for checking later
+        self.updateded_boundary = self.initial_boundary
+
     def compute_H(self):
         """
         Compute H(sqrt(tau)) for each collocation point based on the previous boundary values.
@@ -77,44 +149,29 @@ class DQPlus:
         Returns:
         - H_values (numpy array): The computed H(sqrt(tau)) values.
         """
-        H_values = np.zeros(self.n)
-        for i in range(self.n):
-            # tau = self.tau_nodes[i]
-            B_tau = self.initial_boundary[i]
-            H_values[i] = (np.log(B_tau / self.K))**2
-
+        H_values = np.square((np.log(self.updateded_boundary / self.X)))
+        self.updateded_boundary_q_values = H_values
         return H_values
+    
+    ## compute b(q_values) to obtain the reverse 
+    def q_to_B(self, q):
+        """
+        Given that H_values = q
+        From q/H_values calculate B
 
-    # def fixed_point_iteration(self, max_iter=10, tol=1e-8):
-    #     """
-    #     Perform fixed-point iteration using Newton's method to refine the exercise boundary.
+        Returns:
+        - B_values (numpy array): The computed B(tau) values.
+        """
+        B_values = np.zeros(len(q))
+        for i in range(len(q)):
+            if q[i] < 1: ### When q_value is less than 1 it means that log(B(tau)/X) was negative value
+                B_values[i] = self.X * np.exp(-np.sqrt(q[i]))
+            else:
+                B_values[i] = self.X * np.exp(np.sqrt(q[i]))
 
-    #     Parameters:
-    #     - max_iter (int): Maximum number of iterations.
-    #     - tol (float): Convergence tolerance.
-    #     """
-    #     boundary_values = self.initial_boundary.copy()
+        return B_values
 
-    #     for iteration in range(max_iter):
-    #         prev_boundary = boundary_values.copy()
-
-    #         # Create a new interpolator for the current boundary values
-    #         interpolator = BarycentricInterpolator(self.tau_nodes, boundary_values)
-
-    #         for i in range(1, self.n):
-    #             tau = self.tau_nodes[i]
-    #             boundary_estimate = interpolator(tau)
-
-    #             # Newton's update step
-    #             boundary_values[i] = boundary_estimate - (boundary_estimate - prev_boundary[i]) / 2
-
-    #         # Check for convergence
-    #         max_diff = np.max(np.abs(boundary_values - prev_boundary))
-    #         if max_diff < tol:
-    #             break
-
-    #     self.initial_boundary = boundary_values
-
+    
     def get_boundary_values(self):
         """
         Retrieve the computed exercise boundary values.
@@ -122,28 +179,32 @@ class DQPlus:
         Returns:
         - initial_boundary (numpy array): Refined exercise boundary values.
         """
-        return self.initial_boundary
+        return self.updateded_boundary
     
-    def initialize_chebyshev_interpolation(self, H_values):
+    def get_boundary_values_q(self):
         """
-        Initialize the Chebyshev interpolation by computing the coefficients a_k.
-        """
-        self.chebyshev_interpolator = ChebyshevInterpolator(self.n - 1, np.max(self.tau_nodes))
-        self.chebyshev_interpolator.compute_nodes()
+        Retrieve the computed exercise boundary values in q(z).
 
-        x_nodes, tau_nodes = self.chebyshev_interpolator.get_nodes()
-        z_nodes = -np.cos(np.pi * np.arange(self.n) / (self.n - 1))
-        a_coefficients = np.zeros(self.n)
-        for k in range(self.n):
-            sum_value = 0.0
-            for i in range(1, self.n - 1):
-                cos_term = np.cos(i * k * np.pi / self.n)
-                sum_value += H_values[i] * cos_term
-            a_coefficients[k] = (1 / (2 * self.n)) * (H_values[0] + (-1)**self.n * H_values[-1]) + (2 / self.n) * sum_value
-        self.chebyshev_coefficients = a_coefficients
-        return a_coefficients
+        Returns:
+        - initial_boundary (numpy array): Refined exercise boundary values.
+        """
+        return self.updateded_boundary_q_values
     
-    def clenshaw_algorithm(self, z):
+    def initialize_chebyshev_interpolation(self, q):
+        n = self.n
+        a = np.zeros(n + 1)
+        for k in range(n + 1):
+            ans = 0
+            for i in range(n + 1):
+                term = q[i] * np.cos(i * k * np.pi / n)
+                if i == 0 or i == n:
+                    term *= 0.5
+                ans += term
+            ans *= (2.0 / n)
+            a[k] = ans
+        self.chebyshev_coefficients = a
+
+    def clenshaw_algorithm(self, z, a_coefficients):
         """
         Evaluate the Chebyshev polynomial using Clenshaw's algorithm.
 
@@ -153,117 +214,131 @@ class DQPlus:
         Returns:
         - (float): The evaluated value of the Chebyshev polynomial.
         """
-        if self.chebyshev_coefficients is None:
-            raise ValueError("Chebyshev coefficients are not initialized.")
-        
-        n = len(self.chebyshev_coefficients)
-        b_next = 0.0
-        b_curr = 0.0
+        b0 = self.chebyshev_coefficients[self.n] * 0.5
+        b1 = 0
+        b2 = 0
 
-        for j in range(n - 1, 0, -1):
-            b_temp = b_curr
-            b_curr = 2 * z * b_curr - b_next + self.chebyshev_coefficients[j]
-            b_next = b_temp
-
-        return z * b_curr - b_next + self.chebyshev_coefficients[0]
-
-    def evaluate_boundary(self, tau):
-        """
-        For each tau_i, evaluate B(tau) using Clenshaw algorithm at the adjusted points.
-
-        Parameters:
-        - tau (float): The current time node tau_i.
-
-        Returns:
-        - B_values (numpy array): Evaluated boundary values at adjusted points.
-        """
-        if self.chebyshev_coefficients is None:
-            H_values = self.compute_H()
-            self.initialize_chebyshev_interpolation(H_values)
-
-        B_values = np.zeros(len(self.y_nodes))
-
-        for k, y_k in enumerate(self.y_nodes):
-            adjusted_tau = tau - tau * (1 + y_k)**2 / 4
-            z = 2 * np.sqrt(adjusted_tau / np.max(self.tau_nodes)) - 1
-            B_values[k] = max(self.clenshaw_algorithm(z), 1e-10)  # Ensure B_values are positive
+        for k in range(self.n - 1, -1, -1):
+            b1, b2 = b0, b1
+            b0 = a_coefficients[k] + 2 * z * b1 - b2
+        return 0.5 * (b0 - b2)    
+    
+    def evaluate_boundary(self):
+        self.B_yk = np.zeros((len(self.tau_nodes), len(self.y_nodes))) 
+        for i,tau in enumerate(self.tau_nodes):
+            ## For each tau we hope to obtain a series of nodes
+            qz_interpolated = np.zeros(len(self.y_nodes))
             
-        return B_values
+            # Use the quadrature nodes obtained in the quadacture earlier
+            for k, y_k in enumerate(self.y_nodes):
+                adjusted_tau = tau - tau * (1 + y_k)**2 / 4              # Obtain the adjusted tau for each y_k, but the adjusted tau cannot be too small
+                z = 2 * np.sqrt(adjusted_tau / self.tau_max) - 1             # From the tau obtain the z value
+                qz_interpolated[k] = max(self.clenshaw_algorithm(z, self.chebyshev_coefficients),0) # Interpolate qz using the clenshaw algorithm
+
+            self.B_yk[i] = self.q_to_B(qz_interpolated)                                    # q(z) = H(xi) to back out B_value for the z
+
+    # Before Calculating the Integrand ensure that d1 and d2 can be calculated / Also in the option class
+    # riskfree, dividend, strike, volatility should be defined externally, so the funciton depends only on tau and s0
+    def d1(self, tau, z):
+        return (np.log(z) + (self.r - self.q)*tau + 0.5 * self.vol * self.vol * tau)/(self.vol * np.sqrt(tau))
+
+    def d2(self, tau, z):
+        return (np.log(z) + (self.r - self.q)*tau - 0.5 * self.vol * self.vol * tau)/(self.vol * np.sqrt(tau))
     
-    def compute_ND_values(self, tau, B_values):
-        """
-        Compute N(tau, B) and D(tau, B) using numerical quadrature.
-        """
-        vol_sqrt_tau = max(self.vol * np.sqrt(tau), 1e-8)  # Avoid division by zero
+    # Obtain K1 for each tau(i)
 
-        def integrand_N(u, B):
-            exp_factor = np.exp((self.q - self.r) * u)
-            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau + 0.5 * vol_sqrt_tau
-            return exp_factor * np.exp(-0.5 * m**2) / np.sqrt(2 * np.pi)
+    def K1_integrad (self, tau, B, yk_nodes, B_y):
+        k = len(self.y_nodes)
+        K1integrads = np.zeros(k)
 
-        def integrand_D(u, B):
-            exp_factor = np.exp(self.q * u)
-            m = (np.log(B / self.K) + (self.r - self.q) * u) / vol_sqrt_tau - 0.5 * vol_sqrt_tau
-            return exp_factor * np.exp(-0.5 * m**2) / np.sqrt(2 * np.pi)
+        for i,yk in enumerate(yk_nodes):
+            term0 = tau * (1 + yk)**2 / 4
+            term1 = np.exp(-self.q * term0)
+            term2 = (1 + yk)
+            term3 = norm.cdf(self.d1(term0, B / B_y[i]))
+            # Debugging prints
+            K1integrads[i] = term1 * term2 * term3
+        return K1integrads
 
-        # Prepare adjusted tau values for quadrature
-        adjusted_tau = tau * (1 + self.y_nodes) / 2  # Adjusted for single tau
+    def K1(self):
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            integrad = self.K1_integrad(tau, self.updateded_boundary[i], self.y_nodes, self.B_yk[i])
+            self.k1[i] = tau*np.exp(self.q*tau)*0.5*sum(integrad*self.w_weights)
 
-        # Compute N and D using quadrature nodes and weights
-        N_values = []
-        D_values = []
-
-        for B in B_values:
-            N_integrals = self.w_weights * integrand_N(adjusted_tau, B)
-            D_integrals = self.w_weights * integrand_D(adjusted_tau, B)
-            N_values.append(np.sum(N_integrals))
-            D_values.append(np.sum(D_integrals))
-
-        N_values = np.array(N_values)
-        D_values = np.clip(np.array(D_values), 1e-10, None)  # Avoid division by zero
-
-        return N_values, D_values
+    def K2_integrad (self, tau, B_tau, yk_nodes, B_y):
+        k = len(yk_nodes)
+        K2integrads = np.zeros(k)
     
-    def compute_f_values(self, tau, B_values):
+        for i in range(k):
+            term0 = tau / 4 * (1 + yk_nodes[i])**2
+            term1 = (np.exp(-self.q * term0))/self.vol
+            term2 = norm.pdf(self.d1(term0, B_tau/B_y[i]))
+            K2integrads[i] = term1*term2
+        return K2integrads
+
+    def K2(self):
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            integrad = self.K2_integrad(tau, self.updateded_boundary[i], self.y_nodes, self.B_yk[i])
+            self.k2[i] = np.sqrt(tau)*np.exp(self.q*tau)*sum(integrad*self.w_weights)
+
+    def K3_integrand(self, tau, B_tau, yk_nodes, B_y):
+        k = len(yk_nodes)
+        K3integrads = np.zeros(k)
+
+        for i in range(k):
+            term0 = 0.25 * tau *(1 + yk_nodes[i])**2
+            term1 = (np.exp(-self.r * term0))/self.vol
+            term2 = norm.pdf(self.d2(term0, B_tau/B_y[i]))
+            K3integrads[i] = term1*term2
+        return K3integrads
+
+    def K3(self):
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            integrad = self.K3_integrand(tau, self.updateded_boundary[i], self.y_nodes, self.B_yk[i])
+            self.k3[i] = np.sqrt(tau)*np.exp(self.r*tau)*sum(integrad*self.w_weights)
+
+    def compute_ND_values(self):
+        """
+        Compute N(tau, B) and D(tau, B) from computed k1,k2,k3
+        """
+        N_values = np.zeros(self.n )
+        D_values = np.zeros(self.n )
+
+        for i in range(self.n):
+            tau = self.tau_nodes[i]
+            B_tau = self.updateded_boundary[i]
+
+            N_values[i] = norm.pdf(self.d2(tau, B_tau/self.K))/(self.vol*np.sqrt(tau)) + self.r*self.k3[i]
+            D_values[i] = norm.cdf(self.d1(tau, B_tau/self.K)) + norm.pdf(self.d1(tau, B_tau/self.K))/(self.vol*np.sqrt(tau)) + self.q*(self.k1[i] + self.k2[i])
+
+        self.N_values = N_values
+        self.D_values = D_values
+    
+    def compute_f_values(self):
         """
         Compute f(tau, B) values based on N and D.
         """
-        N_values, D_values = self.compute_ND_values(tau, B_values)
-        f_values = N_values / D_values
+        f_values =  self.K*np.exp(-(self.r-self.q)*self.tau_nodes[:-1])*self.N_values/self.D_values
+        self.f_values =  f_values
 
-        # Return scalar for single-element input
-        if len(B_values) == 1:
-            return np.array([f_values[0]])
-        return f_values
+    ## Approximation of NPrime
+    def Nprime(self):
+        self.N_prime = -self.d2(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K) * norm.pdf(self.d2(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K)) / (self.updateded_boundary[:-1] * self.vol * self.vol * self.tau_nodes[:-1])
+
+    ## Approximation of DPrime
+    def DPrime(self):
+        self.D_prime = -self.d2(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K) * norm.pdf(self.d1(self.tau_nodes[:-1], self.updateded_boundary[:-1]/self.K)) / (self.updateded_boundary[:-1] * self.vol * self.vol * self.tau_nodes[:-1])
+
+    def fprime(self):
+        if self.iteration_no == 0:
+            self.f_prime = self.K*np.exp(-(self.r-self.q)*self.tau_nodes[:-1])*(self.N_prime/self.D_values - self.D_prime*self.N_values/np.square(self.D_values) )
+        else:
+            self.f_prime = np.zeros(len(self.tau_nodes[:-1]))
     
-    def compute_f_derivative(self, tau, B_values, h=1e-5):
-        """
-        Compute f'(tau, B) using numerical differentiation (central difference method).
-
-        Parameters:
-        - tau (float): The current time node tau_i.
-        - B_values (numpy array): Evaluated boundary values at adjusted points.
-        - h (float): Step size for numerical differentiation.
-
-        Returns:
-        - f_derivative (numpy array): Computed derivative values of f with respect to B.
-        """
-        f_derivative = np.zeros(len(B_values))
-
-        for i, B in enumerate(B_values):
-            B_forward = B + h
-            B_backward = B - h
-
-            # Compute f values at B + h and B - h
-            f_forward = self.compute_f_values(tau, np.array([B_forward]))[0]
-            f_backward = self.compute_f_values(tau, np.array([B_backward]))[0]
-
-            # Central difference approximation
-            f_derivative[i] = (f_forward - f_backward) / (2 * h)
-
-        return f_derivative
-    
-    def update_boundary(self, B_values, max_iter=5):
+    def update_boundary(self):
         """
         Update the boundary values using the Jacobi-Newton scheme.
 
@@ -273,45 +348,34 @@ class DQPlus:
         Returns:
         - B_next (numpy array): Updated boundary values B^{(j+1)}(\tau_i).
         """
-        B_next = np.zeros(self.n)
-
+        B_next = np.zeros(self.n+1)
+        
         for i in range(self.n):
             tau = self.tau_nodes[i]
-            B_current = B_values[i]
+            B_current = self.updateded_boundary[i]
 
-            for iter_count in range(max_iter):
+            # Calculate f(tau, B) and f'(tau, B)
+            f_value = self.f_values[i]
+            f_derivative = self.f_prime[i]
 
-                # Calculate f(tau, B) and f'(tau, B)
-                f_value = self.compute_f_values(tau, np.array([B_current]))[0]
-                f_derivative = self.compute_f_derivative(tau, np.array([B_current]))[0]
+            # Avoid division by zero
+            denominator = f_derivative - 1.0
+            if denominator == 0:
+                denominator = 1e-20
 
-                # Avoid division by zero
-                denominator = np.clip(f_derivative - 1.0, 1e-8, None)
+            # Jacobi-Newton update formula
+            numerator = B_current - f_value
+            delta_B = self.eta * (numerator / denominator)
 
-                # Jacobi-Newton update formula
-                numerator = B_current - f_value
-                delta_B = self.eta * (numerator / denominator)
+            # Update boundary value 
+            B_current = B_current + delta_B
 
-                # Update step limit
-                max_step = 0.1 * B_current
-                delta_B = np.clip(delta_B, -max_step, max_step)
-
-                # Update boundary value and check non-negativity
-                B_updated = B_current + delta_B
-                if B_updated >= 0:
-                    B_next[i] = B_updated
-                    break
-                else:
-                    # If the result is negative, decrease the step size \(\eta\)
-                    self.eta *= 0.5
-                    B_current = max(B_current, 1e-10)
-                    
             # Ensure the boundary value is non-negative
-            B_next[i] = max(B_next[i], 1e-10)
-
+            B_next[i] = max(B_current, 1e-10)
+        B_next[self.n] = self.updateded_boundary[self.n]
         return B_next
     
-    def run_full_algorithm(self, m=10):
+    def run_full_algorithm(self):
         """
         Run the complete Jacobi-Newton iterative scheme for pricing American options.
 
@@ -321,46 +385,87 @@ class DQPlus:
         Returns:
         - B_values (numpy array): The final boundary values after m iterations.
         """
-        # Initialize boundary values using the approximate method (B^{(0)})
-        B_values = self.initial_boundary.copy()
-
-        for j in range(1, m + 1):
-            print(f"Starting iteration {j}/{m}")
+        self.initialize_boundary()
+        for j in range(1, self.m + 1):
+            print(f"Starting iteration {j}/{self.m}")
 
             # Step 5: Compute H(sqrt(tau)) and initialize Chebyshev interpolation
             H_values = self.compute_H()
             self.initialize_chebyshev_interpolation(H_values)
 
             # Step 6: Evaluate boundary using Clenshaw algorithm at adjusted points
-            evaluated_B_values = np.zeros((self.n, self.l))
-
-            for i in range(self.n):
-                tau = self.tau_nodes[i]
-                evaluated_B_values[i] = self.evaluate_boundary(tau)
+            self.evaluate_boundary()
 
             # Step 7: Compute N(tau_i, B) and D(tau_i, B), then compute f(tau_i, B)
-            f_values = np.zeros(self.n)
-            # for i in range(self.n):
-            #     tau = self.tau_nodes[i]
-            #     N_values, D_values = self.compute_ND_values(tau, evaluated_B_values[i])
-            #     f_values[i] = np.mean(N_values / D_values)
-            for i in range(self.n):
-                tau = self.tau_nodes[i]
-                # evaluated_B_values[i] = self.evaluate_boundary(tau)
-
-                N_values, D_values = self.compute_ND_values(tau, evaluated_B_values[i])
-                f_values[i] = np.mean(N_values / D_values)
-
-            # Step 8: Compute the derivative f'(tau_i, B) for each tau_i
-            f_derivative_values = np.zeros(self.n)
-            for i in range(self.n):
-                tau = self.tau_nodes[i]
-                f_derivative_values[i] = self.compute_f_derivative(tau, np.array([B_values[i]]))[0]
+            self.K1()
+            self.K2()
+            self.K3()
+            self.compute_ND_values()
+            self.Nprime()
+            self.DPrime()
+            self.compute_f_values()
+            self.fprime()
 
             # Step 9: Update B_values using the Jacobi-Newton scheme
-            B_values = self.update_boundary(B_values)
+            self.updateded_boundary = self.update_boundary()
 
-            print(f"Iteration {j}/{m} completed.")
+            print(f"Iteration {j}/{self.m} completed.")
 
         print("Jacobi-Newton iterations completed.")
-        return tau, B_values
+
+    ## create one iteration for testin
+    def run_once(self):
+        self.initialize_boundary()
+        H_values = self.compute_H()
+        self.initialize_chebyshev_interpolation(H_values)
+
+        # Step 6: Evaluate boundary using Clenshaw algorithm at adjusted points
+        self.evaluate_boundary()
+
+        # Step 7: Compute N(tau_i, B) and D(tau_i, B), then compute f(tau_i, B)
+        self.K1()
+        self.K2()
+        self.K3()
+        self.compute_ND_values()
+        self.Nprime()
+        self.DPrime()
+        self.compute_f_values()
+        self.fprime()
+
+        # Step 9: Update B_values using the Jacobi-Newton scheme
+        self.initial_boundary = self.updateded_boundary
+        self.updateded_boundary = self.update_boundary()
+        print("Jacobi-Newton iterations completed.")
+        print(self.updateded_boundary)
+        self.iteration_no = 1
+
+    
+    ## Manually run once more for testing
+    def manual_update(self):
+        H_values = self.compute_H()
+        self.initialize_chebyshev_interpolation(H_values)
+
+        # Step 6: Evaluate boundary using Clenshaw algorithm at adjusted points
+        self.evaluate_boundary()
+
+        # Step 7: Compute N(tau_i, B) and D(tau_i, B), then compute f(tau_i, B)
+        self.K1()
+        self.K2()
+        self.K3()
+        self.compute_ND_values()
+        self.Nprime()
+        self.DPrime()
+        self.compute_f_values()
+        self.fprime()
+
+        # Step 9: Update B_values using the Jacobi-Newton scheme
+        self.initial_boundary = self.updateded_boundary
+        self.updateded_boundary = self.update_boundary()
+        print("Jacobi-Newton iterations completed.")
+        print(self.updateded_boundary)
+        self.iteration_no += 1
+
+
+
+
+        

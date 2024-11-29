@@ -1,6 +1,6 @@
 import numpy as np
 
-class ChebyshevInterpolator:
+class ChebyshevInterpolation:
     """
     This class handles the computation of Chebyshev interpolation nodes
     and collocation times for American option pricing.
