@@ -295,9 +295,11 @@ The Crank-Nicolson method is a second-order, implicit time-stepping scheme that 
    Transform the Black-Scholes PDE:
    $\frac{\partial V}{\partial t} + \frac{1}{2} \sigma^2 S^2 \frac{\partial^2 V}{\partial S^2} + (r - q) S \frac{\partial V}{\partial S} - rV = 0$
    into a tridiagonal system of equations using the transformation $\( x = \ln(S) \)$.
+   - **Parameter $\( N \)$**: The number of grid points in the spatial dimension (log price $\( x \)$). A higher $\( N \)$ provides finer spatial resolution.
+   - **Parameter $\( M \)$**: The number of time steps used for backward time-stepping. A higher $\( M \)$ ensures smaller time steps and improves stability.
 
 2. **Set Initial and Boundary Conditions**:
-   - Initial condition: Payoff at \( t = T \):
+   - Initial condition: Payoff at $\( t = T \)$:
      $V(S, T) = \max(K - S, 0) \quad \text{(Put)}, \quad V(S, T) = \max(S - K, 0) \quad \text{(Call)}.$
    - Boundary conditions at $\( S \to 0 \)$ and $\( S \to \infty \)$ are derived based on option type and time decay.
 
@@ -347,10 +349,12 @@ solver = CrankNicolsonSolver(
     volatility=0.2,        # Volatility (20%)
     strike=50,             # Strike price
     maturity=1,            # Time to maturity (1 year)
-    option_type=option_type
+    option_type=option_type,
+    N=250,                 # Number of grid points for spatial discretization
+    M=250                  # Number of time steps
 )
-solver.max_dt = 0.01       # Maximum time step
-solver.USE_PSOR = True     # Enable PSOR for early exercise
+
+solver.USE_PSOR = True               # Enable PSOR for early exercise
 
 # Solve for option price
 S0 = 50
