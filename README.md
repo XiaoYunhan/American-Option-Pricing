@@ -76,33 +76,34 @@ This implementation offers a robust framework for evaluating American options us
 
 ### Project Structure
 ```
-AMERICAN-OPTION-PRICING/
+AMERICANOPTIONPRICING/
 │
 ├── .github/
 │   └── workflows/
 │       └── python-package-conda.yml        # GitHub Actions workflow for continuous integration and testing.
 │
-├── docs/                                   # Reference research paper for algorithm implementation.
-│
 ├── notebooks/                              # Jupyter notebooks for exploratory analysis and implementation testing.
 │   ├── compute_table2.ipynb                # Notebook to replicate results in Table 2 from the paper.
-│   └── CrankNicolson.ipynb                 # Crank-Nicolson method implementation and testing.
+│   ├── Crank Nicolson Demo & Analysis.ipynb # Demo and analysis for Crank-Nicolson method.
+│   ├── Greeks for American Option.ipynb    # Notebook for computing Greeks of American options.
+│   └── Spectral Collocation Demo.ipynb     # Spectral Collocation Method implementation and testing.
 │
-├── plot/                                   # Directory for saving plots or visualization results (optional).
-│   └── [Plot-related files or scripts]
+├── plot/                                   # Directory for saving plots or visualization results.
+│   └── [Plot-related files or scripts]     # Placeholder for plot files.
 │
 ├── src/                                    # Main source code directory for the project.
 │   ├── chebyshev_interpolator.py           # Chebyshev node generation and interpolation implementation.
+│   ├── crank_nicolson.py                   # Crank-Nicolson method implementation for option pricing.
 │   ├── dq_plus.py                          # QD+ method for approximating the initial exercise boundary.
 │   ├── Option.py                           # European and American option pricing utilities.
 │   ├── quadrature_nodes.py                 # Quadrature nodes and weights for numerical integration.
-│   └── utils.py                            # General-purpose utility functions for the project.
-│
-├── tests/                                  # Unit tests for each core functionality in `src`.
-│   ├── test_chebyshev_interpolator.py      # Unit tests for `chebyshev_interpolator.py`.
-│   ├── test_dq_plus.py                     # Unit tests for `dq_plus.py`.
-│   ├── test_quadrature_nodes.py            # Unit tests for `quadrature_nodes.py`.
-│   └── test_spectral_collocation.py        # Unit tests for the Spectral Collocation Method.
+│   ├── utils.py                            # General-purpose utility functions for the project.
+│   └── tests/                              # Unit tests for each core functionality in `src`.
+│       ├── test_chebyshev_interpolator.py  # Unit tests for `chebyshev_interpolator.py`.
+│       ├── test_crank_nicolson.py          # Unit tests for `crank_nicolson.py`.
+│       ├── test_dq_plus.py                 # Unit tests for `dq_plus.py`.
+│       ├── test_quadrature_nodes.py        # Unit tests for `quadrature_nodes.py`.
+│       └── test_spectral_collocation.py    # Unit tests for the Spectral Collocation Method.
 │
 ├── .gitignore                              # Specifies files and directories to ignore in version control.
 ├── environment.yml                         # Conda environment file specifying dependencies for the project.
@@ -361,6 +362,33 @@ S0 = 50
 price = solver.solve(S0)
 print(f"The {option_type} option price for S0 = {S0} is: {price:.2f}")
 ```
+
+## Continuous Integration and Testing
+
+The project integrates a CI pipeline using GitHub Actions to ensure high code quality and testing standards. The workflow automates linting, dependency management, and testing, with a focus on achieving **100% test coverage**.
+
+#### CI Workflow
+
+The CI workflow is defined in `.github/workflows/python-package-conda.yml`:
+
+- **Environment Setup**: Installs project dependencies using `conda` from `environment.yml`.
+- **Linting**: Checks code quality and standards using `flake8`.
+- **Testing**: Runs all tests with `pytest` and generates a coverage report. The workflow enforces **100% test coverage** using `--cov` and `--cov-fail-under=100`.
+
+#### Testing with `pytest`
+
+Tests are executed with `pytest` and configured via `pytest.ini`:
+- All modules and tests in the `src` directory are included.
+- Coverage reports are generated for all files in `src`.
+
+Command to run tests locally:
+```bash
+pytest --cov=src --cov-report=term-missing --cov-fail-under=100
+```
+Best Practices for Testing
+- Write comprehensive test cases covering all code paths.
+- Use fixtures for reusable test setups.
+- Ensure tests are modular and isolated, focusing on individual functionalities.
 
 ## Project Requirement
 1. Implement Spectral Collocation Method for pricing American options
