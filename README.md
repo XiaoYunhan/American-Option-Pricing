@@ -234,7 +234,7 @@ Given fixed values of $\( l, m, n \)$, the algorithm can be summarized as follow
 ### Example Usage
 
 ```python
-from src.american_option_pricing import AmericanOptionPricing
+from src.dq_plus import AmericanOptionPricing
 from src.Option import OptionType
 
 # Parameters
