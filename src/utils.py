@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats as stats
 import scipy.optimize
-from src.Option import OptionType, EuropeanOption
+from Option import OptionType, EuropeanOption
 
 class QDplus:
     """

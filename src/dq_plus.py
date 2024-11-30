@@ -2,10 +2,10 @@ import numpy as np
 from scipy.stats import norm
 from scipy.interpolate import BarycentricInterpolator
 from scipy.integrate import quad
-from src.chebyshev_interpolator import ChebyshevInterpolator
-from src.Option import OptionType, EuropeanOption
-from src.quadrature_nodes import QuadratureNodes
-from src.utils import QDplus
+from chebyshev_interpolator import ChebyshevInterpolator
+from Option import OptionType, EuropeanOption
+from quadrature_nodes import QuadratureNodes
+from utils import QDplus
 from enum import Enum
 
 class QuadratureType(Enum):
